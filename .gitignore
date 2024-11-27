@@ -1,0 +1,4 @@
+/target
+libtorrent
+cxx/main
+bindings.rs
