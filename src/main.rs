@@ -60,7 +60,10 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Torrenter",
         options,
-        Box::new(|_cc| Ok(Box::<AppState>::default())),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::<AppState>::default())
+        }),
     )
 }
 
@@ -332,12 +335,22 @@ impl eframe::App for AppState {
                                 }
                             }
                             let info_btn = ui.button("ℹ").on_hover_text("Details".to_owned());
+                            let is_selected = Some(index + 1) == self.selection_index;
+                            if is_selected {
+                                info_btn.clone().highlight();
+                            }
+                            if info_btn.clicked() {
+                                self.selection_index =
+                                    if !is_selected { Some(index + 1) } else { None };
+                            }
+
+                            let state_btn_text = if torrent.state == torrent::TorrentState::Paused {
+                                "▶"
+                            } else {
+                                "⏸"
+                            };
                             let toggle_state_btn = ui
-                                .button(if torrent.state == torrent::TorrentState::Paused {
-                                    "▶"
-                                } else {
-                                    "⏸"
-                                })
+                                .button(state_btn_text)
                                 .on_hover_text("Pause/Resume".to_owned());
                             if toggle_state_btn.clicked() {
                                 if torrent.state == torrent::TorrentState::Paused {
@@ -351,14 +364,6 @@ impl eframe::App for AppState {
                                 }
                             }
 
-                            let is_selected = Some(index + 1) == self.selection_index;
-                            if is_selected {
-                                info_btn.clone().highlight();
-                            }
-                            if info_btn.clicked() {
-                                self.selection_index =
-                                    if !is_selected { Some(index + 1) } else { None };
-                            }
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                                 ui.add(torrent_title);
                             })
@@ -366,9 +371,49 @@ impl eframe::App for AppState {
 
                         // Status
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+
+                            // ui.add(egui::Image::new(egui::include_image!(
+                            //     "../assets/seeding.svg"
+                            // )));
+
+                            let state_color = match torrent.state {
+                                TorrentState::Seeding => {
+                                    Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
+                                }
+                                TorrentState::Downloading => {
+                                    Color32::GREEN.lerp_to_gamma(Color32::WHITE, 0.5)
+                                }
+                                TorrentState::Paused => {
+                                    Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.3)
+                                }
+                                TorrentState::QueuedForChecking
+                                | TorrentState::CheckingFiles
+                                | TorrentState::DownloadingMetaData
+                                | TorrentState::Allocating
+                                | TorrentState::CheckingResumeData => {
+                                    Color32::RED.lerp_to_gamma(Color32::WHITE, 0.5)
+                                }
+                                _ => ui.visuals().text_color(),
+                            };
+
+                            let state_emoji = match torrent.state {
+                                TorrentState::Finished => "✅",
+                                TorrentState::Seeding => "🍒",
+                                TorrentState::Downloading => "📩",
+                                TorrentState::Paused => "⏸",
+                                _ => "⭕",
+                            };
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} {}",
+                                    state_emoji,
+                                    torrent.state.to_string()
+                                ))
+                                .color(state_color),
+                            );
                             ui.label(format!(
-                                "{} • {:.2} {} • ⬇ {:.2} {} • ⬆ {:.2} {} • {} seeds • {} peers",
-                                torrent.state.to_string(),
+                                " • {:.2} {} • ⬇ {:.2} {} • ⬆ {:.2} {} • {} seeds • {} peers",
                                 torrent.total_size,
                                 torrent.total_size_unit,
                                 torrent.download_rate,
