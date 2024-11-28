@@ -2,7 +2,7 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{vec2, Align, Align2, Label, Pos2, Rect, RichText, Vec2};
+use egui::{Align, Align2, Color32, Label, Pos2, Rect, RichText, Rounding, Vec2, Widget};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use std::{
     ffi::{CStr, CString},
@@ -29,10 +29,6 @@ fn prepare_data_dir() -> PathBuf {
     fs::create_dir_all(data_dir.join("resume_files")).expect("Failed to create resume files dir.");
 
     data_dir
-}
-
-fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
-    torrent::refresh(torrents);
 }
 
 fn main() -> eframe::Result {
@@ -68,19 +64,87 @@ fn main() -> eframe::Result {
     )
 }
 
+struct CompoundProgressBar<'a> {
+    torrent: &'a Torrent,
+}
+
+impl<'a> CompoundProgressBar<'a> {
+    fn new(torrent: &'a Torrent) -> Self {
+        CompoundProgressBar { torrent }
+    }
+}
+
+impl Widget for CompoundProgressBar<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        ui.horizontal(|ui| {
+            ui.label(format!("{:.1}%", self.torrent.progress * 100.0));
+
+            let bar_width = ui.available_width();
+            // let ppp = ui.ctx().pixels_per_point();
+            // let groups_count =
+            //     (f32::min(bar_width * ppp, self.torrent.pieces.len() as f32)).floor() as u32;
+            let groups_count = 100;
+            let group_size = self.torrent.pieces.len() as f32 / groups_count as f32;
+            let rect_width = bar_width / groups_count as f32;
+            let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
+
+            let mut groups: Vec<(u32, u32, u32)> = (0..groups_count).map(|_| (0, 0, 0)).collect();
+            for (i, piece) in self.torrent.pieces.iter().enumerate() {
+                let group_index = (i as f32 / group_size as f32).floor() as usize;
+                let group = &mut groups[group_index];
+                let c = match piece {
+                    &TorrentPieceState::Complete => &mut group.0,
+                    &TorrentPieceState::Queued => &mut group.1,
+                    &TorrentPieceState::Incomplete => &mut group.2,
+                };
+                *c += 1;
+            }
+
+            let rects: Vec<Rect> = groups
+                .iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    Rect::from_min_size(
+                        Pos2::new(start_pos.x + (i as f32 * rect_width), start_pos.y),
+                        Vec2::new(rect_width, 15.0),
+                    )
+                })
+                .collect();
+
+            let mut i = 0;
+            for rect in rects {
+                let group = groups[i];
+                let total = group.0 + group.1 + group.2;
+                let i_frac = group.2 as f32 / total as f32;
+                let color = if group.0 > group.1 {
+                    Color32::from_rgb(83, 61, 204)
+                } else if group.1 >= group.0 {
+                    Color32::GREEN
+                } else {
+                    Color32::WHITE
+                }
+                .lerp_to_gamma(Color32::WHITE, i_frac);
+                ui.painter().rect_filled(
+                    ui.painter().round_rect_to_pixels(rect),
+                    Rounding::from(0.0),
+                    color,
+                );
+                i += 1;
+            }
+        })
+        .response
+    }
+}
+
 struct AppState {
     magnet_url: String,
     torrents: Arc<Mutex<Vec<Torrent>>>,
     selection_index: Option<usize>,
     should_stop: Arc<Mutex<bool>>,
-    // last_refresh: std::time::Instant,
-    // counter: std::sync::Arc<std::sync::Mutex<i32>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        // let counter = std::sync::Arc::new(std::sync::Mutex::new(0));
-        // let counter_clone = counter.clone();
         let should_stop = Arc::new(Mutex::new(false));
         let should_stop_clone = should_stop.clone();
 
@@ -118,11 +182,9 @@ impl Default for AppState {
 
         Self {
             magnet_url: "".to_owned(),
-            torrents: torrents,
+            torrents,
             selection_index: None,
-            should_stop: should_stop,
-            // last_refresh: Instant::now(),
-            // counter: counter.clone(),
+            should_stop,
         }
     }
 }
@@ -328,52 +390,11 @@ impl eframe::App for AppState {
                         //     );
                         // });
 
-                        // Complex progress bar
+                        // Compound progress bar
                         if !(torrent.state == TorrentState::DownloadingMetaData
                             || torrent.state == TorrentState::Allocating)
                         {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("{:.1}%", torrent.progress * 100.0));
-
-                                let width = ui.available_width();
-                                let piece_width = width / torrent.pieces.len() as f32;
-                                let start_x = ui.next_widget_position().x;
-                                let start_y = ui.min_rect().top();
-
-                                // let background_rect = Rect::from_min_size(
-                                //     Pos2::new(start_x, start_y),
-                                //     vec2(width, 15.0),
-                                // );
-                                // ui.painter().rect_filled(
-                                //     background_rect,
-                                //     egui::Rounding::from(0.0),
-                                //     egui::Color32::WHITE,
-                                // );
-
-                                for (index, piece) in torrent.pieces.iter().enumerate() {
-                                    // if *piece == TorrentPieceState::Incomplete {
-                                    //     continue;
-                                    // }
-
-                                    let rect = Rect::from_min_size(
-                                        Pos2::new(start_x + (index as f32 * piece_width), start_y),
-                                        vec2(piece_width, 15.0),
-                                    );
-
-                                    let color = match piece {
-                                        TorrentPieceState::Complete => egui::Color32::BLUE,
-                                        TorrentPieceState::Queued => egui::Color32::GREEN,
-                                        _ => egui::Color32::WHITE,
-                                    };
-
-                                    // Draw rectangle for each piece
-                                    ui.painter().rect_filled(
-                                        rect,
-                                        egui::Rounding::from(0.0),
-                                        color,
-                                    );
-                                }
-                            });
+                            ui.add(CompoundProgressBar::new(torrent));
                         }
                         ui.add_space(15.0);
                     });
