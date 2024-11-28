@@ -268,18 +268,15 @@ impl eframe::App for AppState {
 
             ui.heading("Add Torrent ");
             ui.horizontal(|ui| {
-                let h_width = ui.available_width() - ui.spacing().item_spacing.x;
+                let magnet_url_width = ui.available_width() - ui.spacing().item_spacing.x - 100.0;
                 let magnet_url_textbox = egui::TextEdit::singleline(&mut self.magnet_url)
                     .hint_text("Enter magnet URL here.")
                     .vertical_align(Align::Center);
                 let add_button = egui::Button::new("Add Torrent");
 
                 // Add magnet URL handler
-                ui.add_sized(Vec2::new(h_width * 0.8, 30.0), magnet_url_textbox);
-                if ui
-                    .add_sized(Vec2::new(h_width * 0.2, 30.0), add_button)
-                    .clicked()
-                {
+                ui.add_sized(Vec2::new(magnet_url_width, 30.0), magnet_url_textbox);
+                if ui.add_sized(Vec2::new(100.0, 30.0), add_button).clicked() {
                     let downloads_dir = dirs::download_dir()
                         .expect("Failed to get downloads dir.")
                         .to_str()
