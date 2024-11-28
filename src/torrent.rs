@@ -12,12 +12,9 @@ pub struct Torrent {
     pub progress: f32,
     pub state: TorrentState,
     pub hash: String,
-    pub total_size: f32,
-    pub total_size_unit: String,
-    pub download_rate: f32,
-    pub download_rate_unit: String,
-    pub upload_rate: f32,
-    pub upload_rate_unit: String,
+    pub total_size: i64,
+    pub download_rate: i64,
+    pub upload_rate: i64,
     pub num_peers: i32,
     pub num_seeds: i32,
     pub pieces: Vec<TorrentPieceState>,
@@ -32,12 +29,9 @@ impl Torrent {
             progress: 0.0,
             state: TorrentState::CheckingResumeData,
             hash: "".to_owned(),
-            total_size: 0.0,
-            total_size_unit: "B/s".to_string(),
-            download_rate: 0.0,
-            download_rate_unit: "B/s".to_string(),
-            upload_rate: 0.0,
-            upload_rate_unit: "B/s".to_string(),
+            total_size: 0,
+            download_rate: 0,
+            upload_rate: 0,
             num_peers: 0,
             num_seeds: 0,
             pieces: vec![],
@@ -83,61 +77,6 @@ pub enum TorrentPieceState {
     Queued,
 }
 
-fn auto_transfer_rate(byte_rate: i32) -> (f32, String) {
-    let gb = i32::pow(10, 9);
-    let mb = i32::pow(10, 6);
-    let kb = i32::pow(10, 3);
-
-    let rate: f32;
-    let unit: &str;
-
-    if byte_rate >= gb {
-        rate = byte_rate as f32 / gb as f32;
-        unit = "GB/s"
-    } else if byte_rate >= mb {
-        rate = byte_rate as f32 / mb as f32;
-        unit = "MB/s"
-    } else if byte_rate >= kb {
-        rate = byte_rate as f32 / kb as f32;
-        unit = "KB/s"
-    } else {
-        rate = byte_rate as f32;
-        unit = "B/s";
-    }
-
-    (rate, unit.to_owned())
-}
-
-// Use macro to reduce redundancy
-fn auto_transfer_size(bytes: i64) -> (f32, String) {
-    let tb = i64::pow(10, 12);
-    let gb = i64::pow(10, 9);
-    let mb = i64::pow(10, 6);
-    let kb = i64::pow(10, 3);
-
-    let rate: f32;
-    let unit: &str;
-
-    if bytes >= tb {
-        rate = bytes as f32 / tb as f32;
-        unit = "TB"
-    } else if bytes >= gb {
-        rate = bytes as f32 / gb as f32;
-        unit = "GB"
-    } else if bytes >= mb {
-        rate = bytes as f32 / mb as f32;
-        unit = "MB"
-    } else if bytes >= kb {
-        rate = bytes as f32 / kb as f32;
-        unit = "KB"
-    } else {
-        rate = bytes as f32;
-        unit = "B";
-    }
-
-    (rate, unit.to_owned())
-}
-
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     let torrents_count = unsafe { get_count() as usize };
     let mut torrents = torrents.lock().unwrap();
@@ -165,10 +104,9 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
             7 => TorrentState::CheckingResumeData,
             _ => TorrentState::Paused,
         };
-        (torrent.download_rate, torrent.download_rate_unit) =
-            auto_transfer_rate(info.download_rate);
-        (torrent.upload_rate, torrent.upload_rate_unit) = auto_transfer_rate(info.upload_rate);
-        (torrent.total_size, torrent.total_size_unit) = auto_transfer_size(info.total_size);
+        torrent.total_size = info.total_size;
+        torrent.download_rate = info.download_rate;
+        torrent.upload_rate = info.upload_rate;
         torrent.num_peers = info.peers;
         torrent.num_seeds = info.seeds;
         torrent.pieces = unsafe {

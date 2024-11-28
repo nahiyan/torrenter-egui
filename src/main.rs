@@ -22,6 +22,31 @@ macro_rules! dummy_str {
     };
 }
 
+macro_rules! format_bytes {
+    ($bytes: expr, $prefix: literal) => {{
+        let tb = i64::pow(10, 12);
+        let gb = i64::pow(10, 9);
+        let mb = i64::pow(10, 6);
+        let kb = i64::pow(10, 3);
+
+        if $bytes >= tb {
+            format!("{:.2} TB{}", $bytes as f32 / tb as f32, $prefix)
+        } else if $bytes >= gb {
+            format!("{:.2} GB{}", $bytes as f32 / gb as f32, $prefix)
+        } else if $bytes >= mb {
+            format!("{:.2} MB{}", $bytes as f32 / mb as f32, $prefix)
+        } else if $bytes >= kb {
+            format!("{:.2} KB{}", $bytes as f32 / kb as f32, $prefix)
+        } else {
+            format!("{:.2} B{}", $bytes as f32 / mb as f32, $prefix)
+        }
+    }};
+
+    ($bytes: expr) => {
+        format_bytes!($bytes, "")
+    };
+}
+
 fn prepare_data_dir() -> PathBuf {
     let data_dir_base = dirs::data_dir().expect("Failed to get the data dir.");
     let data_dir = data_dir_base.join("com.github.nahiyan").join("torrenter");
@@ -413,13 +438,10 @@ impl eframe::App for AppState {
                                 .color(state_color),
                             );
                             ui.label(format!(
-                                " • {:.2} {} • ⬇ {:.2} {} • ⬆ {:.2} {} • {} seeds • {} peers",
-                                torrent.total_size,
-                                torrent.total_size_unit,
-                                torrent.download_rate,
-                                torrent.download_rate_unit,
-                                torrent.upload_rate,
-                                torrent.upload_rate_unit,
+                                " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
+                                format_bytes!(torrent.total_size),
+                                format_bytes!(torrent.download_rate, "/s"),
+                                format_bytes!(torrent.upload_rate, "/s"),
                                 torrent.num_seeds,
                                 torrent.num_seeds
                             ));
