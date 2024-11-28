@@ -11,8 +11,8 @@ struct TorrentInfo {
   const char *name;
   int state;
   float progress;
-  int peers, seeds, download_rate, upload_rate, total_pieces;
-  long total_size;
+  int peers, seeds;
+  long total_size, download_rate, upload_rate, total_pieces;
   char *pieces;
   bool is_streaming;
 };

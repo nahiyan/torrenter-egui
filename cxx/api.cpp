@@ -20,26 +20,25 @@
 #include <thread>
 #include <vector>
 
-using namespace libtorrent;
 using namespace std;
 namespace fs = std::filesystem;
 
 struct Torrent {
-  torrent_handle h;
-  add_torrent_params atp;
+  lt::torrent_handle h;
+  lt::add_torrent_params atp;
   string hash;
   string name;
 };
 
 struct State {
-  session ses;
+  lt::session *ses;
   vector<Torrent *> torrents;
   string resume_dir;
   bool should_stop = false;
   int pending_save_alerts = 0;
 } state;
 
-const char *libtorrent_version() { return version(); }
+const char *libtorrent_version() { return lt::version(); }
 
 string to_hex(const string binary_data) {
   ostringstream oss;
@@ -48,8 +47,8 @@ string to_hex(const string binary_data) {
   return oss.str();
 }
 
-string get_hash(torrent_handle &h) {
-  info_hash_t hashes = h.info_hashes();
+string get_hash(lt::torrent_handle &h) {
+  lt::info_hash_t hashes = h.info_hashes();
   string hash = to_hex(hashes.get_best().to_string());
   return hash;
 }
@@ -60,8 +59,8 @@ const char *read_resume_file(const char *path) {
   std::vector<char> buf{std::istream_iterator<char>(ifs),
                         std::istream_iterator<char>()};
   if (buf.size()) {
-    add_torrent_params atp = read_resume_data(buf);
-    torrent_handle h = state.ses.add_torrent(atp);
+    lt::add_torrent_params atp = lt::read_resume_data(buf);
+    lt::torrent_handle h = state.ses->add_torrent(atp);
     string hash = get_hash(h);
     Torrent *t = new Torrent{h, atp, hash};
     state.torrents.push_back(t);
@@ -74,7 +73,7 @@ const char *read_resume_file(const char *path) {
   return "";
 }
 
-fs::path get_resume_file_path(torrent_handle &h) {
+fs::path get_resume_file_path(lt::torrent_handle &h) {
   string hash = get_hash(h);
   assert(!hash.empty());
   fs::path resume_file_path =
@@ -82,7 +81,7 @@ fs::path get_resume_file_path(torrent_handle &h) {
   return resume_file_path;
 }
 
-void write_resume_file(torrent_handle &h, add_torrent_params &atp) {
+void write_resume_file(lt::torrent_handle &h, lt::add_torrent_params &atp) {
   try {
     fs::path resume_file_path = get_resume_file_path(h);
     printf("Writing resume file: %s\n", resume_file_path.c_str());
@@ -101,6 +100,7 @@ void write_resume_file(torrent_handle &h, add_torrent_params &atp) {
 }
 
 void initiate(const char *resume_dir) {
+  state.ses = new lt::session;
   state.resume_dir = string(resume_dir);
   try {
     for (const auto &entry : fs::directory_iterator(state.resume_dir))
@@ -111,9 +111,9 @@ void initiate(const char *resume_dir) {
 }
 
 const char *add_magnet_url(const char *url, const char *save_path) {
-  add_torrent_params atp = parse_magnet_uri(url);
+  lt::add_torrent_params atp = lt::parse_magnet_uri(url);
   atp.save_path = save_path;
-  torrent_handle h = state.ses.add_torrent(atp);
+  lt::torrent_handle h = state.ses->add_torrent(atp);
   string hash = get_hash(h);
   Torrent *t = new Torrent{h, atp, hash};
   state.torrents.push_back(t);
@@ -124,15 +124,15 @@ const char *add_magnet_url(const char *url, const char *save_path) {
 int get_count() { return (int)state.torrents.size(); }
 
 void handle_alerts() {
-  std::vector<alert *> alerts;
-  state.ses.pop_alerts(&alerts);
+  std::vector<lt::alert *> alerts;
+  state.ses->pop_alerts(&alerts);
 
   for (lt::alert *alert : alerts) {
     if (auto *at = lt::alert_cast<lt::save_resume_data_alert>(alert)) {
       write_resume_file(at->handle, at->params);
       state.pending_save_alerts--;
-    }
-    if (auto *at = lt::alert_cast<lt::save_resume_data_failed_alert>(alert)) {
+    } else if (auto *at =
+                   lt::alert_cast<lt::save_resume_data_failed_alert>(alert)) {
       cout << "Failed to save resume data" << endl;
       state.pending_save_alerts--;
     }
@@ -159,7 +159,7 @@ void torrent_remove(int index) {
   std::remove(rf_path.c_str());
 
   // Remove from lt::session
-  state.ses.remove_torrent(state.torrents[index]->h);
+  state.ses->remove_torrent(state.torrents[index]->h);
 
   // Remove from memory
   delete state.torrents[index];
@@ -168,18 +168,18 @@ void torrent_remove(int index) {
 
 void toggle_stream(int index) {
   auto &h = state.torrents[index]->h;
-  bool is_seq = (h.flags() & torrent_flags::sequential_download) ==
-                torrent_flags::sequential_download;
+  bool is_seq = (h.flags() & lt::torrent_flags::sequential_download) ==
+                lt::torrent_flags::sequential_download;
   // Roughly guess if we're streaming by priority of the last piece
   int num_pieces = h.status().pieces.size();
   bool is_streaming =
       is_seq && h.piece_priority(max(num_pieces - 1, 0)) == lt::top_priority;
 
   if (!is_streaming)
-    h.set_flags(torrent_flags::sequential_download,
-                torrent_flags::sequential_download);
+    h.set_flags(lt::torrent_flags::sequential_download,
+                lt::torrent_flags::sequential_download);
   else
-    h.unset_flags(torrent_flags::sequential_download);
+    h.unset_flags(lt::torrent_flags::sequential_download);
 
   // Set the priority for 1% (by size) of last pieces
   int piece_length = h.torrent_file()->piece_length();
@@ -207,10 +207,10 @@ struct TorrentInfo get_torrent_info(int index) {
   info.upload_rate = status.upload_rate;
 
   // State
-  bool ses_paused = state.ses.is_paused();
+  bool ses_paused = state.ses->is_paused();
   bool torrent_paused =
-      (status.flags & (torrent_flags::auto_managed | torrent_flags::paused)) ==
-      torrent_flags::paused;
+      (status.flags & (lt::torrent_flags::auto_managed |
+                       lt::torrent_flags::paused)) == lt::torrent_flags::paused;
   info.state = ses_paused || torrent_paused ? -1 : status.state;
 
   // Size
@@ -226,13 +226,13 @@ struct TorrentInfo get_torrent_info(int index) {
   for (bool b : bitfield)
     info.pieces[i++] = b ? 'c' : 'i';
 
-  std::vector<partial_piece_info> queue = h.get_download_queue();
+  std::vector<lt::partial_piece_info> queue = h.get_download_queue();
   for (auto &q : queue)
     info.pieces[q.piece_index] = 'q';
 
   // Streaming
-  info.is_streaming = (h.flags() & torrent_flags::sequential_download) ==
-                      torrent_flags::sequential_download;
+  info.is_streaming = (h.flags() & lt::torrent_flags::sequential_download) ==
+                      lt::torrent_flags::sequential_download;
 
   return info;
 }
@@ -240,13 +240,13 @@ struct TorrentInfo get_torrent_info(int index) {
 void free_torrent_info(TorrentInfo info) { delete[] info.pieces; }
 
 void destroy() {
-  state.ses.pause();
+  state.ses->pause();
   for (auto &torrent : state.torrents) {
     // torrent->h.pause();
     try {
-      torrent->h.save_resume_data(torrent_handle::only_if_modified |
-                                  torrent_handle::save_info_dict |
-                                  torrent_handle::flush_disk_cache);
+      torrent->h.save_resume_data(lt::torrent_handle::only_if_modified |
+                                  lt::torrent_handle::save_info_dict |
+                                  lt::torrent_handle::flush_disk_cache);
       state.pending_save_alerts++;
     } catch (lt::system_error &e) {
       printf("Failed to save resume data.\n");
@@ -257,5 +257,6 @@ void destroy() {
     handle_alerts();
     this_thread::sleep_for(chrono::milliseconds(100));
   }
-  state.ses.abort();
+  state.ses->abort();
+  delete state.ses;
 }
