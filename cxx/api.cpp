@@ -8,6 +8,7 @@
 #include <libtorrent/alert.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/download_priority.hpp>
+#include <libtorrent/file_storage.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/read_resume_data.hpp>
 #include <libtorrent/session.hpp>
@@ -28,6 +29,12 @@ struct Torrent {
   lt::add_torrent_params atp;
   string hash;
   string name;
+
+  Torrent(lt::torrent_handle &h, lt::add_torrent_params &atp, string hash) {
+    this->h = h;
+    this->atp = atp;
+    this->hash = hash;
+  }
 };
 
 struct State {
@@ -53,6 +60,14 @@ string get_hash(lt::torrent_handle &h) {
   return hash;
 }
 
+fs::path get_resume_file_path(lt::torrent_handle &h) {
+  string hash = get_hash(h);
+  assert(!hash.empty());
+  fs::path resume_file_path =
+      fs::path(state.resume_dir).append(hash + ".resume");
+  return resume_file_path;
+}
+
 const char *read_resume_file(const char *path) {
   std::ifstream ifs(path, std::ios_base::binary);
   ifs.unsetf(std::ios_base::skipws);
@@ -62,23 +77,14 @@ const char *read_resume_file(const char *path) {
     lt::add_torrent_params atp = lt::read_resume_data(buf);
     lt::torrent_handle h = state.ses->add_torrent(atp);
     string hash = get_hash(h);
-    Torrent *t = new Torrent{h, atp, hash};
+    Torrent *t = new Torrent(h, atp, hash);
     state.torrents.push_back(t);
 
     return t->hash.c_str();
   }
 
   printf("Failed to read resume data.\n");
-
   return "";
-}
-
-fs::path get_resume_file_path(lt::torrent_handle &h) {
-  string hash = get_hash(h);
-  assert(!hash.empty());
-  fs::path resume_file_path =
-      fs::path(state.resume_dir).append(hash + ".resume");
-  return resume_file_path;
 }
 
 void write_resume_file(lt::torrent_handle &h, lt::add_torrent_params &atp) {
@@ -115,7 +121,7 @@ const char *add_magnet_url(const char *url, const char *save_path) {
   atp.save_path = save_path;
   lt::torrent_handle h = state.ses->add_torrent(atp);
   string hash = get_hash(h);
-  Torrent *t = new Torrent{h, atp, hash};
+  Torrent *t = new Torrent(h, atp, hash);
   state.torrents.push_back(t);
   write_resume_file(h, atp);
   return t->hash.c_str();
@@ -172,8 +178,10 @@ void toggle_stream(int index) {
                 lt::torrent_flags::sequential_download;
   // Roughly guess if we're streaming by priority of the last piece
   int num_pieces = h.status().pieces.size();
+  assert(num_pieces > 0);
+  // TODO: Check last 1% of the pieces for priority
   bool is_streaming =
-      is_seq && h.piece_priority(max(num_pieces - 1, 0)) == lt::top_priority;
+      is_seq && h.piece_priority(num_pieces) == lt::top_priority;
 
   if (!is_streaming)
     h.set_flags(lt::torrent_flags::sequential_download,
@@ -194,8 +202,9 @@ struct TorrentInfo get_torrent_info(int index) {
   Torrent *t = state.torrents[index];
   lt::torrent_handle &h = t->h;
   lt::torrent_status status = h.status();
-
+  auto torrent_info = h.torrent_file();
   TorrentInfo info;
+
   // Name
   t->name = status.name;
   info.name = t->name.c_str();
@@ -214,9 +223,8 @@ struct TorrentInfo get_torrent_info(int index) {
   info.state = ses_paused || torrent_paused ? -1 : status.state;
 
   // Size
-  auto torrent_info = h.torrent_file();
-  info.total_size =
-      torrent_info != NULL ? torrent_info->total_size() : status.total_wanted;
+  info.total_size = torrent_info != nullptr ? torrent_info->total_size()
+                                            : status.total_wanted;
 
   // Pieces: for each char, 'c' -> complete, 'i' -> incomplete, 'q' -> queued.
   info.total_pieces = status.pieces.size();
@@ -234,10 +242,32 @@ struct TorrentInfo get_torrent_info(int index) {
   info.is_streaming = (h.flags() & lt::torrent_flags::sequential_download) ==
                       lt::torrent_flags::sequential_download;
 
+  // Files
+  if (torrent_info != nullptr) {
+    info.num_files = torrent_info->files().num_files();
+    info.files = new File[info.num_files];
+    for (int i = 0; i < info.num_files; i++) {
+      lt::string_view fname = torrent_info->files().file_name(i);
+      assert(!fname.empty());
+      info.files[i].name = new char[fname.size() + 1];
+      copy(fname.begin(), fname.end(), info.files[i].name);
+      info.files[i].name[fname.size()] = '\0';
+    }
+  } else {
+    info.num_files = 0;
+  }
+
   return info;
 }
 
-void free_torrent_info(TorrentInfo info) { delete[] info.pieces; }
+void free_torrent_info(TorrentInfo info) {
+  delete[] info.pieces;
+  for (int i = 0; i < info.num_files; i++) {
+    delete[] info.files[i].name;
+  }
+  if (info.num_files > 0)
+    delete[] info.files;
+}
 
 void destroy() {
   state.ses->pause();

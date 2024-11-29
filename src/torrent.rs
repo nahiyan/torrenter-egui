@@ -19,6 +19,8 @@ pub struct Torrent {
     pub num_seeds: i32,
     pub pieces: Vec<TorrentPieceState>,
     pub is_streaming: bool,
+    pub num_files: i32,
+    pub files: Vec<String>,
 }
 
 impl Torrent {
@@ -36,6 +38,8 @@ impl Torrent {
             num_seeds: 0,
             pieces: vec![],
             is_streaming: false,
+            num_files: 0,
+            files: vec![],
         }
     }
 }
@@ -124,6 +128,19 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
             pieces
         };
         torrent.is_streaming = info.is_streaming;
+        torrent.num_files = info.num_files;
+        torrent.files = unsafe {
+            let files = std::slice::from_raw_parts(info.files, info.num_files as usize);
+            files
+                .iter()
+                .map(|file| {
+                    CStr::from_ptr(file.name)
+                        .to_str()
+                        .expect("Failed to get C string")
+                        .to_string()
+                })
+                .collect()
+        };
 
         unsafe {
             free_torrent_info(info);

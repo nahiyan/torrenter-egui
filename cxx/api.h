@@ -7,6 +7,10 @@
 extern "C" {
 #endif
 
+struct File {
+  char *name;
+};
+
 struct TorrentInfo {
   const char *name;
   int state;
@@ -15,6 +19,8 @@ struct TorrentInfo {
   long total_size, download_rate, upload_rate, total_pieces;
   char *pieces;
   bool is_streaming;
+  int num_files;
+  struct File *files;
 };
 
 // Lifecycle

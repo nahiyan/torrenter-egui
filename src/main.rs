@@ -2,8 +2,10 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{Align, Align2, Color32, Label, Pos2, Rect, RichText, Rounding, Vec2, Widget};
+use egui::Vec2;
+use egui::{Align, Align2, Color32, Label, RichText};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use progress_bar::CompoundProgressBar;
 use std::{
     ffi::{CStr, CString},
     fs,
@@ -13,14 +15,10 @@ use std::{
     thread,
     time::Duration,
 };
-use torrent::{Torrent, TorrentPieceState, TorrentState};
+use torrent::{Torrent, TorrentState};
+mod progress_bar;
 mod torrent;
 include!("../bindings.rs");
-macro_rules! dummy_str {
-    () => {
-        "Exercitation deserunt eu qui eu pariatur dolore duis velit amet adipisicing ea excepteur cupidatat.".to_owned()
-    };
-}
 
 macro_rules! format_bytes {
     ($bytes: expr, $prefix: literal) => {{
@@ -60,28 +58,23 @@ fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     log::info!("Application started");
 
+    // Load torrents from resume files
     let data_dir = prepare_data_dir();
+    let resume_dir = data_dir
+        .join("resume_files")
+        .to_str()
+        .expect("Failed to str of path")
+        .to_string();
     unsafe {
-        let resume_dir = data_dir
-            .join("resume_files")
-            .to_str()
-            .expect("Failed to str of path")
-            .to_string();
         let resume_dir_cstr = CString::new(resume_dir).expect("Failed to convert to CString");
-        // Load torrents from resume files
         initiate(resume_dir_cstr.as_ptr());
     }
 
+    // Spawn the frame
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_maximized(true)
-            .with_maximize_button(true),
-        // .with_inner_size([700.0, 700.0])
-
-        // .with_fullscreen(true),
+        viewport: egui::ViewportBuilder::default().with_maximize_button(true),
         ..Default::default()
     };
-
     eframe::run_native(
         "Torrenter",
         options,
@@ -90,78 +83,6 @@ fn main() -> eframe::Result {
             Ok(Box::<AppState>::default())
         }),
     )
-}
-
-struct CompoundProgressBar<'a> {
-    torrent: &'a Torrent,
-}
-
-impl<'a> CompoundProgressBar<'a> {
-    fn new(torrent: &'a Torrent) -> Self {
-        CompoundProgressBar { torrent }
-    }
-}
-
-impl Widget for CompoundProgressBar<'_> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.label(format!("{:.1}%", self.torrent.progress * 100.0));
-
-            let bar_width = ui.available_width();
-            // let ppp = ui.ctx().pixels_per_point();
-            // let groups_count =
-            //     (f32::min(bar_width * ppp, self.torrent.pieces.len() as f32)).floor() as u32;
-            let groups_count = 100;
-            let group_size = self.torrent.pieces.len() as f32 / groups_count as f32;
-            let rect_width = bar_width / groups_count as f32;
-            let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
-
-            let mut groups: Vec<(u32, u32, u32)> = (0..groups_count).map(|_| (0, 0, 0)).collect();
-            for (i, piece) in self.torrent.pieces.iter().enumerate() {
-                let group_index = (i as f32 / group_size as f32).floor() as usize;
-                let group = &mut groups[group_index];
-                let c = match piece {
-                    &TorrentPieceState::Complete => &mut group.0,
-                    &TorrentPieceState::Queued => &mut group.1,
-                    &TorrentPieceState::Incomplete => &mut group.2,
-                };
-                *c += 1;
-            }
-
-            let rects: Vec<Rect> = groups
-                .iter()
-                .enumerate()
-                .map(|(i, _)| {
-                    Rect::from_min_size(
-                        Pos2::new(start_pos.x + (i as f32 * rect_width), start_pos.y),
-                        Vec2::new(rect_width, 15.0),
-                    )
-                })
-                .collect();
-
-            let mut i = 0;
-            for rect in rects {
-                let group = groups[i];
-                let total = group.0 + group.1 + group.2;
-                let i_frac = group.2 as f32 / total as f32;
-                let color = if group.0 > group.1 {
-                    Color32::from_rgb(83, 61, 204)
-                } else if group.1 >= group.0 {
-                    Color32::GREEN
-                } else {
-                    Color32::WHITE
-                }
-                .lerp_to_gamma(Color32::WHITE, i_frac);
-                ui.painter().rect_filled(
-                    ui.painter().round_rect_to_pixels(rect),
-                    Rounding::from(0.0),
-                    color,
-                );
-                i += 1;
-            }
-        })
-        .response
-    }
 }
 
 struct AppState {
@@ -233,13 +154,10 @@ impl eframe::App for AppState {
                         ui.add_space(5.0);
                         ui.heading("Torrent Details");
                         ui.add_space(5.0);
-                        ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Hey"));
-                        ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Hey"));
-                        ui.label(torrent.name.to_owned());
-                        ui.label(dummy_str!());
-                        ui.label(dummy_str!());
-                        ui.label(dummy_str!());
-                        ui.label(dummy_str!());
+
+                        for file in &torrent.files {
+                            ui.label(file);
+                        }
                     });
                 });
         }
@@ -251,6 +169,30 @@ impl eframe::App for AppState {
             let mut toasts = Toasts::new()
                 .anchor(Align2::LEFT_TOP, (10.0, 10.0))
                 .direction(egui::Direction::TopDown);
+
+            // Drag and drop guide
+            // ui.horizontal(|ui| {
+            //     let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
+            //     let drop_rect =
+            //         Rect::from_min_size(start_pos, Vec2::new(ui.available_width(), 50.0));
+            //     let rect = ui.allocate_rect(drop_rect, Sense::hover());
+            //     let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
+            //     // let pasted_content = ctx.input(|i| i.raw.);
+            //     let about_to_drop = !hovering_files.is_empty();
+            //     let color = if about_to_drop {
+            //         Color32::WHITE.gamma_multiply(0.2)
+            //     } else {
+            //         Color32::WHITE.gamma_multiply(0.5)
+            //     };
+            //     let stroke = if about_to_drop {
+            //         Stroke::new(2.0, Color32::GREEN)
+            //     } else {
+            //         Stroke::new(2.0, Color32::WHITE)
+            //     };
+            //     ui.painter()
+            //         .rect(rect.rect, Rounding::from(0.0), color, stroke);
+            // });
+            // ui.add_space(10.0);
 
             // if ui.button("Open File").clicked() {
             //     let file = rfd::FileDialog::new()
@@ -328,8 +270,10 @@ impl eframe::App for AppState {
                     ui.vertical(|ui| {
                         // Title and controls
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            // Remove torrent
                             let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
                             if remove_btn.clicked() {
+                                self.selection_index = None;
                                 unsafe {
                                     torrent_remove(index as c_int);
                                 }
@@ -344,6 +288,7 @@ impl eframe::App for AppState {
                                 });
                             }
 
+                            // Toggle strewam
                             let stream_btn = ui
                                 .button(if torrent.is_streaming {
                                     RichText::new("📶").strong()
@@ -356,6 +301,8 @@ impl eframe::App for AppState {
                                     toggle_stream(index as c_int);
                                 }
                             }
+
+                            // Info button
                             let info_btn = ui.button("ℹ").on_hover_text("Details".to_owned());
                             let is_selected = Some(index + 1) == self.selection_index;
                             if is_selected {
