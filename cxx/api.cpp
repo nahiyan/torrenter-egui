@@ -274,10 +274,12 @@ void destroy() {
   for (auto &torrent : state.torrents) {
     // torrent->h.pause();
     try {
-      torrent->h.save_resume_data(lt::torrent_handle::only_if_modified |
-                                  lt::torrent_handle::save_info_dict |
-                                  lt::torrent_handle::flush_disk_cache);
-      state.pending_save_alerts++;
+      if (torrent->h.need_save_resume_data()) {
+        torrent->h.save_resume_data(lt::torrent_handle::only_if_modified |
+                                    lt::torrent_handle::save_info_dict |
+                                    lt::torrent_handle::flush_disk_cache);
+        state.pending_save_alerts++;
+      }
     } catch (lt::system_error &e) {
       printf("Failed to save resume data.\n");
     }
