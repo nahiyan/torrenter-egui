@@ -12,6 +12,7 @@
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/read_resume_data.hpp>
 #include <libtorrent/session.hpp>
+#include <libtorrent/settings_pack.hpp>
 #include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_info.hpp>
@@ -107,6 +108,14 @@ void write_resume_file(lt::torrent_handle &h, lt::add_torrent_params &atp) {
 
 void initiate(const char *resume_dir) {
   state.ses = new lt::session;
+
+  lt::settings_pack sp = lt::default_settings();
+  sp.set_int(sp.active_downloads, -1);
+  sp.set_int(sp.connections_limit, 1000);
+  sp.set_int(sp.active_seeds, -1);
+  sp.set_int(sp.stop_tracker_timeout, 0);
+  state.ses->apply_settings(sp);
+
   state.resume_dir = string(resume_dir);
   try {
     for (const auto &entry : fs::directory_iterator(state.resume_dir))
@@ -181,7 +190,7 @@ void toggle_stream(int index) {
   assert(num_pieces > 0);
   // TODO: Check last 1% of the pieces for priority
   bool is_streaming =
-      is_seq && h.piece_priority(num_pieces) == lt::top_priority;
+      is_seq && h.piece_priority(num_pieces - 1) == lt::top_priority;
 
   if (!is_streaming)
     h.set_flags(lt::torrent_flags::sequential_download,
@@ -271,8 +280,9 @@ void free_torrent_info(TorrentInfo info) {
 
 void destroy() {
   state.ses->pause();
+  printf("Session paused.\n");
   for (auto &torrent : state.torrents) {
-    // torrent->h.pause();
+    torrent->h.pause();
     try {
       if (torrent->h.need_save_resume_data()) {
         torrent->h.save_resume_data(lt::torrent_handle::only_if_modified |
@@ -289,6 +299,8 @@ void destroy() {
     handle_alerts();
     this_thread::sleep_for(chrono::milliseconds(100));
   }
+  printf("Done with saving.\n");
   state.ses->abort();
   delete state.ses;
+  printf("Deleted session.\n");
 }
