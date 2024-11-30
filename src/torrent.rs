@@ -6,6 +6,7 @@ use std::{
 
 include!("../bindings.rs");
 
+#[derive(Clone)]
 pub struct Torrent {
     pub name: String,
     pub save_path: String,
@@ -44,7 +45,7 @@ impl Torrent {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TorrentState {
     QueuedForChecking,
     CheckingFiles,
@@ -74,7 +75,7 @@ impl fmt::Display for TorrentState {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum TorrentPieceState {
     Complete,
     Incomplete,
@@ -84,6 +85,9 @@ pub enum TorrentPieceState {
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     let torrents_count = unsafe { get_count() as usize };
     let mut torrents = torrents.lock().unwrap();
+    torrents.resize(torrents_count, Torrent::new("".to_owned(), "".to_owned()));
+    assert!(torrents_count == torrents.len());
+
     for index in 0..torrents_count {
         let torrent = torrents
             .get_mut(index as usize)
@@ -130,22 +134,24 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
         torrent.is_streaming = info.is_streaming;
         torrent.num_files = info.num_files;
         torrent.files = unsafe {
-            let files = std::slice::from_raw_parts(info.files, info.num_files as usize);
-            files
-                .iter()
-                .map(|file| {
-                    CStr::from_ptr(file.name)
-                        .to_str()
-                        .expect("Failed to get C string")
-                        .to_string()
-                })
-                .collect()
+            if torrent.num_files > 0 {
+                let files = std::slice::from_raw_parts(info.files, info.num_files as usize);
+                files
+                    .iter()
+                    .map(|file| {
+                        CStr::from_ptr(file.name)
+                            .to_str()
+                            .expect("Failed to get C string")
+                            .to_string()
+                    })
+                    .collect()
+            } else {
+                vec![]
+            }
         };
 
         unsafe {
             free_torrent_info(info);
         }
     }
-
-    torrents.truncate(torrents_count);
 }

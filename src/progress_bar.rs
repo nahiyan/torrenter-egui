@@ -62,6 +62,7 @@ impl Widget for CompoundProgressBar<'_> {
                     Color32::WHITE
                 }
                 .lerp_to_gamma(Color32::WHITE, i_frac);
+                // TODO: Allocate this space in the ui
                 ui.painter().rect_filled(
                     ui.painter().round_rect_to_pixels(rect),
                     Rounding::from(0.0),
