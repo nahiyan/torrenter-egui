@@ -3,9 +3,12 @@
 
 use eframe::egui;
 use egui::Vec2;
-use egui::{Align, Align2, Color32, Label, RichText};
+use egui::{Align, Align2, Color32, Label, RichText, Sense, Ui, WidgetText};
+use egui_dock::DockState;
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use progress_bar::CompoundProgressBar;
+use std::sync::mpsc::Sender;
+use std::time::Instant;
 use std::{
     ffi::{CStr, CString},
     fs,
@@ -89,14 +92,24 @@ struct AppState {
     magnet_url: String,
     torrents: Arc<Mutex<Vec<Torrent>>>,
     selection_index: Option<usize>,
-    should_stop: Arc<Mutex<bool>>,
+    dock_state: DockState<Tab>,
+    channel_tx: Sender<Message>,
+    safe_to_exit: Arc<Mutex<bool>>,
+}
+
+#[derive(PartialEq, Debug)]
+enum Message {
+    Stop,
+    Refresh,
+    ForcedRefresh,
+    AddTorrent(String),
+    RemoveTorrent(usize),
+    UpdateState(TorrentState, usize),
+    ToggleStream(usize),
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        let should_stop = Arc::new(Mutex::new(false));
-        let should_stop_clone = should_stop.clone();
-
         let torrents = Arc::new(Mutex::new({
             let torrents_count = unsafe { get_count() };
             let mut torrents = Vec::new();
@@ -113,33 +126,110 @@ impl Default for AppState {
             }
             torrents
         }));
-        let torrents_clone = torrents.clone();
+
+        let safe_to_exit = Arc::new(Mutex::new(false));
+        let (tx, rx) = std::sync::mpsc::channel::<Message>();
+        let mut last_refresh = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+        let tx_clone = tx.clone();
 
         // Perform torrent-related tasks in the background
+        let torrents_clone = torrents.clone();
+        let safe_to_exit_clone = safe_to_exit.clone();
         thread::spawn(move || loop {
-            if *should_stop_clone.lock().unwrap() {
-                println!("Stopping.");
-                break;
-            }
+            let message = rx.recv().unwrap();
+            match message {
+                Message::Stop => {
+                    println!("Stopping.");
+                    unsafe {
+                        destroy();
+                    };
+                    *safe_to_exit_clone.lock().unwrap() = true;
 
-            unsafe {
-                handle_alerts();
+                    break;
+                }
+                Message::Refresh | Message::ForcedRefresh => {
+                    let now = Instant::now();
+                    let elapsed = now.duration_since(last_refresh).as_secs_f32();
+
+                    if elapsed >= 0.9 || message == Message::ForcedRefresh {
+                        unsafe { handle_alerts() }
+                        torrent::refresh(torrents_clone.clone());
+                        last_refresh = now;
+                    }
+                }
+                Message::AddTorrent(magnet_url) => {
+                    let downloads_dir = dirs::download_dir()
+                        .expect("Failed to get downloads dir.")
+                        .to_str()
+                        .expect("Failed to convert to string")
+                        .to_owned();
+                    let magnet_url_cstr =
+                        CString::new(magnet_url).expect("Failed to create CString");
+                    let downloads_dir_cstr =
+                        CString::new(downloads_dir.clone()).expect("Failed to create CString");
+                    let mut torrent = Torrent::new("".to_owned(), downloads_dir);
+                    // TODO: Handle errors
+                    torrent.hash = unsafe {
+                        let hash_cstr =
+                            add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
+                        CStr::from_ptr(hash_cstr)
+                            .to_str()
+                            .expect("Failed to work with cstr")
+                            .to_string()
+                    };
+                    tx_clone.send(Message::ForcedRefresh).unwrap();
+                }
+                Message::UpdateState(state, index) => {
+                    if state == torrent::TorrentState::Paused {
+                        unsafe {
+                            torrent_resume(index as c_int);
+                        }
+                    } else {
+                        unsafe {
+                            torrent_pause(index as c_int);
+                        }
+                    }
+                    tx_clone.send(Message::ForcedRefresh).unwrap();
+                }
+                Message::RemoveTorrent(index) => unsafe {
+                    torrent_remove(index as c_int);
+                    tx_clone.send(Message::ForcedRefresh).unwrap();
+                },
+                Message::ToggleStream(index) => unsafe {
+                    toggle_stream(index as c_int);
+                    tx_clone.send(Message::ForcedRefresh).unwrap();
+                },
             }
-            torrent::refresh(torrents_clone.to_owned());
-            thread::sleep(std::time::Duration::from_secs(1));
         });
 
         Self {
             magnet_url: "".to_owned(),
             torrents,
             selection_index: None,
-            should_stop,
+            dock_state: DockState::new(vec!["General".to_owned(), "Files".to_owned()]),
+            channel_tx: tx,
+            safe_to_exit: safe_to_exit.clone(),
         }
+    }
+}
+
+struct TabViewer;
+type Tab = String;
+impl egui_dock::TabViewer for TabViewer {
+    type Tab = Tab;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
+        tab.as_str().into()
+    }
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        ui.label(format!("Content of {tab}"));
     }
 }
 
 impl eframe::App for AppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.channel_tx.send(Message::Refresh).unwrap();
         let mut torrents = self.torrents.lock().unwrap();
 
         // Bottom panel
@@ -150,7 +240,17 @@ impl eframe::App for AppState {
                 .min_height(200.0)
                 // .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(0.0, 5.0)))
                 .show(ctx, |ui| {
+                    // let tabs = ["tab1", "tab2", "tab3"]
+                    //     .map(str::to_string)
+                    //     .into_iter()
+                    //     .collect();
+                    // let dock_state = DockState::new(tabs);
                     egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.allocate_at_least(
+                            Vec2::new(ui.available_width(), 0.0),
+                            Sense::focusable_noninteractive(),
+                        );
+
                         ui.add_space(5.0);
                         ui.heading("Torrent Details");
                         ui.add_space(5.0);
@@ -166,97 +266,87 @@ impl eframe::App for AppState {
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_pixels_per_point(1.3);
 
+            // // let mut tree = DockState::new(vec!["tab1".to_owned(), "tab2".to_owned()]);
+            // DockArea::new(&mut self.dock_state)
+            //     .style(Style::from_egui(ctx.style().as_ref()))
+            //     .show_close_buttons(false)
+            //     .show(ctx, &mut TabViewer {});
+            // ui.add_space(100.0);
             let mut toasts = Toasts::new()
                 .anchor(Align2::LEFT_TOP, (10.0, 10.0))
                 .direction(egui::Direction::TopDown);
-
-            // Drag and drop guide
-            // ui.horizontal(|ui| {
-            //     let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
-            //     let drop_rect =
-            //         Rect::from_min_size(start_pos, Vec2::new(ui.available_width(), 50.0));
-            //     let rect = ui.allocate_rect(drop_rect, Sense::hover());
-            //     let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
-            //     // let pasted_content = ctx.input(|i| i.raw.);
-            //     let about_to_drop = !hovering_files.is_empty();
-            //     let color = if about_to_drop {
-            //         Color32::WHITE.gamma_multiply(0.2)
-            //     } else {
-            //         Color32::WHITE.gamma_multiply(0.5)
-            //     };
-            //     let stroke = if about_to_drop {
-            //         Stroke::new(2.0, Color32::GREEN)
-            //     } else {
-            //         Stroke::new(2.0, Color32::WHITE)
-            //     };
-            //     ui.painter()
-            //         .rect(rect.rect, Rounding::from(0.0), color, stroke);
-            // });
-            // ui.add_space(10.0);
-
-            // if ui.button("Open File").clicked() {
-            //     let file = rfd::FileDialog::new()
-            //         .add_filter("torrent", &["torrent"])
-            //         .pick_file();
-            //     if let Some(f) = file {
-            //         println!(
-            //             "File selected: {}",
-            //             f.to_str().expect("Failed to get string from file path.")
-            //         );
-            //     } else {
-            //         println!("No file selected");
-            //     }
-            // }
-
-            ui.heading("Add Torrent ");
-            ui.horizontal(|ui| {
-                let magnet_url_width = ui.available_width() - ui.spacing().item_spacing.x - 100.0;
-                let magnet_url_textbox = egui::TextEdit::singleline(&mut self.magnet_url)
-                    .hint_text("Enter magnet URL here.")
-                    .vertical_align(Align::Center);
-                let add_button = egui::Button::new("Add Torrent");
-
-                // Add magnet URL handler
-                ui.add_sized(Vec2::new(magnet_url_width, 30.0), magnet_url_textbox);
-                if ui.add_sized(Vec2::new(100.0, 30.0), add_button).clicked() {
-                    let downloads_dir = dirs::download_dir()
-                        .expect("Failed to get downloads dir.")
-                        .to_str()
-                        .expect("Failed to convert to string")
-                        .to_owned();
-                    let magnet_url_cstr =
-                        CString::new(self.magnet_url.clone()).expect("Failed to create CString");
-                    let downloads_dir_cstr =
-                        CString::new(downloads_dir.clone()).expect("Failed to create CString");
-                    let mut torrent = Torrent::new("".to_owned(), downloads_dir);
-                    torrent.hash = unsafe {
-                        let hash_cstr =
-                            add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
-                        CStr::from_ptr(hash_cstr)
-                            .to_str()
-                            .expect("Failed to work with cstr")
-                            .to_string()
-                    };
-                    torrents.push(torrent);
-                    self.magnet_url = "".to_owned();
-
-                    toasts.add(Toast {
-                        text: "Added new torrent.".into(),
-                        kind: ToastKind::Success,
-                        options: ToastOptions::default()
-                            .duration(Duration::from_secs(5))
-                            .show_progress(true),
-                        ..Default::default()
-                    });
-                }
-            });
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(10.0);
-            ui.heading("Torrents");
-            ui.add_space(5.0);
-
             egui::ScrollArea::vertical().show(ui, |ui| {
+                // Drag and drop guide
+                // ui.horizontal(|ui| {
+                //     let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
+                //     let drop_rect =
+                //         Rect::from_min_size(start_pos, Vec2::new(ui.available_width(), 50.0));
+                //     let rect = ui.allocate_rect(drop_rect, Sense::hover());
+                //     let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
+                //     // let pasted_content = ctx.input(|i| i.raw.);
+                //     let about_to_drop = !hovering_files.is_empty();
+                //     let color = if about_to_drop {
+                //         Color32::WHITE.gamma_multiply(0.2)
+                //     } else {
+                //         Color32::WHITE.gamma_multiply(0.5)
+                //     };
+                //     let stroke = if about_to_drop {
+                //         Stroke::new(2.0, Color32::GREEN)
+                //     } else {
+                //         Stroke::new(2.0, Color32::WHITE)
+                //     };
+                //     ui.painter()
+                //         .rect(rect.rect, Rounding::from(0.0), color, stroke);
+                // });
+                // ui.add_space(10.0);
+
+                // if ui.button("Open File").clicked() {
+                //     let file = rfd::FileDialog::new()
+                //         .add_filter("torrent", &["torrent"])
+                //         .pick_file();
+                //     if let Some(f) = file {
+                //         println!(
+                //             "File selected: {}",
+                //             f.to_str().expect("Failed to get string from file path.")
+                //         );
+                //     } else {
+                //         println!("No file selected");
+                //     }
+                // }
+
+                ui.heading("Add Torrent ");
+                ui.horizontal(|ui| {
+                    let magnet_url_width =
+                        ui.available_width() - ui.spacing().item_spacing.x - 100.0;
+                    let magnet_url_textbox = egui::TextEdit::singleline(&mut self.magnet_url)
+                        .hint_text("Enter magnet URL here.")
+                        .vertical_align(Align::Center);
+                    let add_btn = egui::Button::new("Add Torrent");
+
+                    // Add magnet URL handler
+                    ui.add_sized(Vec2::new(magnet_url_width, 30.0), magnet_url_textbox);
+                    if ui.add_sized(Vec2::new(100.0, 30.0), add_btn).clicked() {
+                        self.channel_tx
+                            .send(Message::AddTorrent(self.magnet_url.clone()))
+                            .unwrap();
+                        self.magnet_url = "".to_owned();
+
+                        toasts.add(Toast {
+                            text: "Added new torrent.".into(),
+                            kind: ToastKind::Success,
+                            options: ToastOptions::default()
+                                .duration(Duration::from_secs(5))
+                                .show_progress(true),
+                            ..Default::default()
+                        });
+                    }
+                });
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.heading("Torrents");
+                ui.add_space(5.0);
+
                 for (index, torrent) in torrents.iter().enumerate() {
                     let torrent_title = {
                         let name = if torrent.name == "".to_string() {
@@ -273,10 +363,10 @@ impl eframe::App for AppState {
                             // Remove torrent
                             let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
                             if remove_btn.clicked() {
+                                self.channel_tx
+                                    .send(Message::RemoveTorrent(index.clone()))
+                                    .unwrap();
                                 self.selection_index = None;
-                                unsafe {
-                                    torrent_remove(index as c_int);
-                                }
 
                                 toasts.add(Toast {
                                     text: "Removed torrent.".into(),
@@ -295,42 +385,44 @@ impl eframe::App for AppState {
                                 } else {
                                     RichText::new("📶")
                                 })
-                                .on_hover_text("Stream".to_owned());
+                                .on_hover_text("Stream");
                             if stream_btn.clicked() {
-                                unsafe {
-                                    toggle_stream(index as c_int);
-                                }
+                                self.channel_tx
+                                    .send(Message::ToggleStream(index.clone()))
+                                    .unwrap();
                             }
 
                             // Info button
-                            let info_btn = ui.button("ℹ").on_hover_text("Details".to_owned());
+                            let info_btn = ui.button("ℹ").on_hover_text("Details");
                             let is_selected = Some(index + 1) == self.selection_index;
+
                             if is_selected {
                                 info_btn.clone().highlight();
                             }
                             if info_btn.clicked() {
-                                self.selection_index =
-                                    if !is_selected { Some(index + 1) } else { None };
+                                self.selection_index = if !is_selected {
+                                    self.channel_tx.send(Message::ForcedRefresh).unwrap();
+                                    Some(index + 1)
+                                } else {
+                                    None
+                                };
                             }
 
+                            // Pause/Resume btn
                             let state_btn_text = if torrent.state == torrent::TorrentState::Paused {
                                 "▶"
                             } else {
                                 "⏸"
                             };
-                            let toggle_state_btn = ui
-                                .button(state_btn_text)
-                                .on_hover_text("Pause/Resume".to_owned());
+                            let toggle_state_btn =
+                                ui.button(state_btn_text).on_hover_text("Pause/Resume");
                             if toggle_state_btn.clicked() {
-                                if torrent.state == torrent::TorrentState::Paused {
-                                    unsafe {
-                                        torrent_resume(index as c_int);
-                                    }
-                                } else {
-                                    unsafe {
-                                        torrent_pause(index as c_int);
-                                    }
-                                }
+                                self.channel_tx
+                                    .send(Message::UpdateState(
+                                        torrent.state.clone(),
+                                        index.clone(),
+                                    ))
+                                    .unwrap();
                             }
 
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
@@ -342,10 +434,7 @@ impl eframe::App for AppState {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
 
-                            // ui.add(egui::Image::new(egui::include_image!(
-                            //     "../assets/seeding.svg"
-                            // )));
-
+                            // Color
                             let state_color = match torrent.state {
                                 TorrentState::Seeding => {
                                     Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
@@ -366,6 +455,7 @@ impl eframe::App for AppState {
                                 _ => ui.visuals().text_color(),
                             };
 
+                            // Emoji
                             let state_emoji = match torrent.state {
                                 TorrentState::Finished => "✅",
                                 TorrentState::Seeding => "🍒",
@@ -381,6 +471,8 @@ impl eframe::App for AppState {
                                 ))
                                 .color(state_color),
                             );
+
+                            // Label
                             ui.label(format!(
                                 " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
                                 format_bytes!(torrent.total_size),
@@ -391,20 +483,11 @@ impl eframe::App for AppState {
                             ));
                         });
 
-                        // // Progress bar
-                        // ui.horizontal(|ui| {
-                        //     ui.add(
-                        //         ProgressBar::new(torrent.progress)
-                        //             .rounding(egui::Rounding::from(3.0))
-                        //             .show_percentage()
-                        //             .desired_height(15.0),
-                        //     );
-                        // });
-
                         // Compound progress bar
-                        if !(torrent.state == TorrentState::DownloadingMetaData
-                            || torrent.state == TorrentState::Allocating)
+                        if torrent.state == TorrentState::DownloadingMetaData
+                            || torrent.state == TorrentState::Allocating
                         {
+                        } else {
                             ui.add(CompoundProgressBar::new(torrent));
                         }
                         ui.add_space(15.0);
@@ -418,9 +501,11 @@ impl eframe::App for AppState {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        *self.should_stop.lock().unwrap() = true;
-        unsafe {
-            destroy();
-        };
+        self.channel_tx.send(Message::Stop).unwrap();
+        loop {
+            if *self.safe_to_exit.lock().unwrap() {
+                break;
+            }
+        }
     }
 }
