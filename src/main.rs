@@ -2,9 +2,8 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::Vec2;
-use egui::{Align, Align2, Color32, Label, RichText, Sense, Ui, WidgetText};
-use egui_dock::DockState;
+use egui::{Align, Align2, Color32, Label, RichText, Sense};
+use egui::{Layout, Vec2};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use progress_bar::CompoundProgressBar;
 use std::sync::mpsc::Sender;
@@ -88,13 +87,26 @@ fn main() -> eframe::Result {
     )
 }
 
+#[derive(PartialEq, Clone)]
+enum Tab {
+    General,
+    Files,
+    Peers,
+    Trackers,
+}
+
+struct TabView {
+    tabs: [(Tab, String, bool); 4],
+    selected: Tab,
+}
+
 struct AppState {
     magnet_url: String,
     torrents: Arc<Mutex<Vec<Torrent>>>,
     selection_index: Option<usize>,
-    dock_state: DockState<Tab>,
     channel_tx: Sender<Message>,
     safe_to_exit: Arc<Mutex<bool>>,
+    tab_view: TabView,
 }
 
 #[derive(PartialEq, Debug)]
@@ -221,24 +233,19 @@ impl Default for AppState {
             magnet_url: "".to_owned(),
             torrents,
             selection_index: None,
-            dock_state: DockState::new(vec!["General".to_owned(), "Files".to_owned()]),
             channel_tx: tx,
             safe_to_exit: safe_to_exit.clone(),
+            // selected_tab: Tab::General,
+            tab_view: TabView {
+                tabs: [
+                    (Tab::General, "General".to_owned(), false),
+                    (Tab::Files, "Files".to_owned(), false),
+                    (Tab::Peers, "Peers".to_owned(), false),
+                    (Tab::Trackers, "Trackers".to_owned(), false),
+                ],
+                selected: Tab::General,
+            },
         }
-    }
-}
-
-struct TabViewer;
-type Tab = String;
-impl egui_dock::TabViewer for TabViewer {
-    type Tab = Tab;
-
-    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
-        tab.as_str().into()
-    }
-
-    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
-        ui.label(format!("Content of {tab}"));
     }
 }
 
@@ -260,6 +267,15 @@ impl eframe::App for AppState {
                     //     .into_iter()
                     //     .collect();
                     // let dock_state = DockState::new(tabs);
+                    ui.add_space(5.0);
+                    ui.horizontal(|ui| {
+                        ui.with_layout(Layout::right_to_left(Align::RIGHT), |ui| {
+                            if ui.button("✖").clicked() {
+                                self.selection_index = None;
+                            }
+                        });
+                    });
+                    ui.add_space(5.0);
                     egui::ScrollArea::both().show(ui, |ui| {
                         // Force the scroll area to expand horizontally
                         ui.allocate_at_least(
@@ -267,36 +283,78 @@ impl eframe::App for AppState {
                             Sense::focusable_noninteractive(),
                         );
 
+                        ui.horizontal(|ui| {
+                            self.tab_view
+                                .tabs
+                                .iter_mut()
+                                .for_each(|(tab, text, is_hovered)| {
+                                    let rt = {
+                                        let rt = RichText::new(text.clone());
+                                        if tab.clone() == self.tab_view.selected {
+                                            rt.strong().underline()
+                                        } else if is_hovered.clone() {
+                                            rt.underline()
+                                        } else {
+                                            rt
+                                        }
+                                    };
+                                    let label = ui
+                                        .label(rt)
+                                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                                    if label.clicked() {
+                                        self.tab_view.selected = tab.clone();
+                                    }
+                                    *is_hovered = label.hovered();
+                                });
+                        });
+
                         ui.add_space(5.0);
                         ui.heading("Torrent Details");
                         ui.add_space(5.0);
 
-                        let mut files_enabled: Vec<bool> = torrent
-                            .files
-                            .iter()
-                            .map(|f| match f.1 {
-                                TorrentFilePriority::Skip => false,
-                                _ => true,
-                            })
-                            .collect();
-                        for (f_index, file) in torrent.files.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                if ui.checkbox(&mut files_enabled[f_index], &file.0).changed() {
-                                    let is_enabled = files_enabled[f_index];
-                                    let priority = if is_enabled {
-                                        TorrentFilePriority::Default
-                                    } else {
-                                        TorrentFilePriority::Skip
-                                    };
-                                    self.channel_tx
-                                        .send(Message::ChangeFilePriority(
-                                            index - 1,
-                                            f_index,
-                                            priority,
-                                        ))
-                                        .unwrap();
+                        match self.tab_view.selected {
+                            Tab::General => {
+                                ui.vertical(|ui| {
+                                    ui.label("General");
+                                });
+                            }
+                            Tab::Files => {
+                                let mut files_enabled: Vec<bool> = torrent
+                                    .files
+                                    .iter()
+                                    .map(|f| match f.1 {
+                                        TorrentFilePriority::Skip => false,
+                                        _ => true,
+                                    })
+                                    .collect();
+                                for (f_index, file) in torrent.files.iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        if ui
+                                            .checkbox(&mut files_enabled[f_index], &file.0)
+                                            .changed()
+                                        {
+                                            let is_enabled = files_enabled[f_index];
+                                            let priority = if is_enabled {
+                                                TorrentFilePriority::Default
+                                            } else {
+                                                TorrentFilePriority::Skip
+                                            };
+                                            self.channel_tx
+                                                .send(Message::ChangeFilePriority(
+                                                    index - 1,
+                                                    f_index,
+                                                    priority,
+                                                ))
+                                                .unwrap();
+                                        }
+                                    });
                                 }
-                            });
+                            }
+                            _ => {
+                                ui.vertical(|ui| {
+                                    ui.label("Elit Lorem commodo Lorem proident voluptate sunt ad consequat enim.");
+                                });
+                            }
                         }
                     });
                 });
@@ -306,12 +364,6 @@ impl eframe::App for AppState {
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_pixels_per_point(1.3);
 
-            // // let mut tree = DockState::new(vec!["tab1".to_owned(), "tab2".to_owned()]);
-            // DockArea::new(&mut self.dock_state)
-            //     .style(Style::from_egui(ctx.style().as_ref()))
-            //     .show_close_buttons(false)
-            //     .show(ctx, &mut TabViewer {});
-            // ui.add_space(100.0);
             let mut toasts = Toasts::new()
                 .anchor(Align2::LEFT_TOP, (10.0, 10.0))
                 .direction(egui::Direction::TopDown);

@@ -164,6 +164,12 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
                 vec![]
             }
         };
+        torrent.save_path = unsafe {
+            CStr::from_ptr(info.save_path)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string()
+        };
 
         unsafe {
             free_torrent_info(info);

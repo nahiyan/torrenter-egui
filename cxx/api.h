@@ -14,6 +14,7 @@ struct File {
 
 struct TorrentInfo {
   const char *name;
+  const char *save_path;
   int state;
   float progress;
   int peers, seeds;

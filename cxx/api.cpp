@@ -30,6 +30,7 @@ struct Torrent {
   lt::add_torrent_params atp;
   string hash;
   string name;
+  string save_path;
 
   Torrent(lt::torrent_handle &h, lt::add_torrent_params &atp, string hash) {
     this->h = h;
@@ -234,6 +235,10 @@ struct TorrentInfo get_torrent_info(int index) {
   // Name
   t->name = status.name;
   info.name = t->name.c_str();
+
+  // Save path
+  t->save_path = status.save_path;
+  info.save_path = t->save_path.c_str();
 
   info.progress = status.progress;
   info.peers = status.num_peers;
