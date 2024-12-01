@@ -262,11 +262,6 @@ impl eframe::App for AppState {
                 .min_height(200.0)
                 // .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(0.0, 5.0)))
                 .show(ctx, |ui| {
-                    // let tabs = ["tab1", "tab2", "tab3"]
-                    //     .map(str::to_string)
-                    //     .into_iter()
-                    //     .collect();
-                    // let dock_state = DockState::new(tabs);
                     ui.add_space(5.0);
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(Align::RIGHT), |ui| {
