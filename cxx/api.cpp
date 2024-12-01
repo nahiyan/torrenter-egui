@@ -155,6 +155,8 @@ void handle_alerts() {
 }
 
 void torrent_pause(int index) {
+  assert(index < state.torrents.size());
+
   lt::torrent_handle &h = state.torrents[index]->h;
   h.unset_flags(lt::torrent_flags::auto_managed);
   h.set_flags(lt::torrent_flags::paused, lt::torrent_flags::paused);
@@ -162,6 +164,8 @@ void torrent_pause(int index) {
 }
 
 void torrent_resume(int index) {
+  assert(index < state.torrents.size());
+
   lt::torrent_handle &h = state.torrents[index]->h;
   h.unset_flags(lt::torrent_flags::paused);
   h.set_flags(lt::torrent_flags::auto_managed, lt::torrent_flags::auto_managed);
@@ -169,6 +173,8 @@ void torrent_resume(int index) {
 }
 
 void torrent_remove(int index) {
+  assert(index < state.torrents.size());
+
   // Remove resume file
   fs::path rf_path = get_resume_file_path(state.torrents[index]->h);
   std::remove(rf_path.c_str());
@@ -182,7 +188,9 @@ void torrent_remove(int index) {
 }
 
 void toggle_stream(int index) {
-  auto &h = state.torrents[index]->h;
+  assert(index < state.torrents.size());
+
+  lt::torrent_handle &h = state.torrents[index]->h;
   bool is_seq = (h.flags() & lt::torrent_flags::sequential_download) ==
                 lt::torrent_flags::sequential_download;
   // Roughly guess if we're streaming by priority of the last piece
@@ -207,7 +215,16 @@ void toggle_stream(int index) {
                      !is_streaming ? lt::top_priority : lt::default_priority);
 }
 
+void change_file_priority(int index, int f_index, int priority) {
+  assert(index < state.torrents.size());
+
+  lt::torrent_handle &h = state.torrents[index]->h;
+  h.file_priority(f_index, (lt::download_priority_t)priority);
+}
+
 struct TorrentInfo get_torrent_info(int index) {
+  assert(index < state.torrents.size());
+
   Torrent *t = state.torrents[index];
   lt::torrent_handle &h = t->h;
   lt::torrent_status status = h.status();
@@ -252,15 +269,18 @@ struct TorrentInfo get_torrent_info(int index) {
                       lt::torrent_flags::sequential_download;
 
   // Files
+  auto file_priorities = h.get_file_priorities();
   if (torrent_info != nullptr) {
     info.num_files = torrent_info->files().num_files();
     info.files = new File[info.num_files];
     for (int i = 0; i < info.num_files; i++) {
-      lt::string_view fname = torrent_info->files().file_name(i);
-      assert(!fname.empty());
-      info.files[i].name = new char[fname.size() + 1];
-      copy(fname.begin(), fname.end(), info.files[i].name);
-      info.files[i].name[fname.size()] = '\0';
+      string fpath = torrent_info->files().file_path(i);
+      assert(!fpath.empty());
+      File &file = info.files[i];
+      file.path = new char[fpath.size() + 1];
+      copy(fpath.begin(), fpath.end(), info.files[i].path);
+      file.path[fpath.size()] = '\0';
+      file.priority = file_priorities[i];
     }
   } else {
     info.num_files = 0;
@@ -272,7 +292,7 @@ struct TorrentInfo get_torrent_info(int index) {
 void free_torrent_info(TorrentInfo info) {
   delete[] info.pieces;
   for (int i = 0; i < info.num_files; i++) {
-    delete[] info.files[i].name;
+    delete[] info.files[i].path;
   }
   if (info.num_files > 0)
     delete[] info.files;

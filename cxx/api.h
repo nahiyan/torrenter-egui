@@ -8,7 +8,8 @@ extern "C" {
 #endif
 
 struct File {
-  char *name;
+  char *path;
+  int priority;
 };
 
 struct TorrentInfo {
@@ -36,6 +37,7 @@ void torrent_pause(int index);
 void torrent_resume(int index);
 void torrent_remove(int index);
 void toggle_stream(int index);
+void change_file_priority(int, int, int);
 
 // Utilities
 const char *libtorrent_version();

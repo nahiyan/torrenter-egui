@@ -18,7 +18,7 @@ use std::{
     thread,
     time::Duration,
 };
-use torrent::{Torrent, TorrentState};
+use torrent::{Torrent, TorrentFilePriority, TorrentState};
 mod progress_bar;
 mod torrent;
 include!("../bindings.rs");
@@ -106,6 +106,7 @@ enum Message {
     RemoveTorrent(usize),
     UpdateState(TorrentState, usize),
     ToggleStream(usize),
+    ChangeFilePriority(usize, usize, TorrentFilePriority),
 }
 
 impl Default for AppState {
@@ -199,6 +200,20 @@ impl Default for AppState {
                     toggle_stream(index as c_int);
                     tx_clone.send(Message::ForcedRefresh).unwrap();
                 },
+                Message::ChangeFilePriority(index, f_index, priority) => unsafe {
+                    let lt_download_priority = match priority {
+                        TorrentFilePriority::Skip => 0,
+                        TorrentFilePriority::Low => 1,
+                        TorrentFilePriority::Default => 4,
+                        TorrentFilePriority::High => 7,
+                    };
+                    change_file_priority(
+                        index as c_int,
+                        f_index as c_int,
+                        lt_download_priority as c_int,
+                    );
+                    tx_clone.send(Message::ForcedRefresh).unwrap();
+                },
             }
         });
 
@@ -230,7 +245,7 @@ impl egui_dock::TabViewer for TabViewer {
 impl eframe::App for AppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.channel_tx.send(Message::Refresh).unwrap();
-        let mut torrents = self.torrents.lock().unwrap();
+        let torrents = self.torrents.lock().unwrap();
 
         // Bottom panel
         if let Some(index) = self.selection_index {
@@ -245,7 +260,8 @@ impl eframe::App for AppState {
                     //     .into_iter()
                     //     .collect();
                     // let dock_state = DockState::new(tabs);
-                    egui::ScrollArea::vertical().show(ui, |ui| {
+                    egui::ScrollArea::both().show(ui, |ui| {
+                        // Force the scroll area to expand horizontally
                         ui.allocate_at_least(
                             Vec2::new(ui.available_width(), 0.0),
                             Sense::focusable_noninteractive(),
@@ -255,8 +271,32 @@ impl eframe::App for AppState {
                         ui.heading("Torrent Details");
                         ui.add_space(5.0);
 
-                        for file in &torrent.files {
-                            ui.label(file);
+                        let mut files_enabled: Vec<bool> = torrent
+                            .files
+                            .iter()
+                            .map(|f| match f.1 {
+                                TorrentFilePriority::Skip => false,
+                                _ => true,
+                            })
+                            .collect();
+                        for (f_index, file) in torrent.files.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                if ui.checkbox(&mut files_enabled[f_index], &file.0).changed() {
+                                    let is_enabled = files_enabled[f_index];
+                                    let priority = if is_enabled {
+                                        TorrentFilePriority::Default
+                                    } else {
+                                        TorrentFilePriority::Skip
+                                    };
+                                    self.channel_tx
+                                        .send(Message::ChangeFilePriority(
+                                            index - 1,
+                                            f_index,
+                                            priority,
+                                        ))
+                                        .unwrap();
+                                }
+                            });
                         }
                     });
                 });

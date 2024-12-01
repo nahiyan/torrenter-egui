@@ -6,6 +6,13 @@ use std::{
 
 include!("../bindings.rs");
 
+#[derive(PartialEq, Clone, Debug)]
+pub enum TorrentFilePriority {
+    Skip,
+    Default,
+    Low,
+    High,
+}
 #[derive(Clone)]
 pub struct Torrent {
     pub name: String,
@@ -21,7 +28,7 @@ pub struct Torrent {
     pub pieces: Vec<TorrentPieceState>,
     pub is_streaming: bool,
     pub num_files: i32,
-    pub files: Vec<String>,
+    pub files: Vec<(String, TorrentFilePriority)>,
 }
 
 impl Torrent {
@@ -139,10 +146,18 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
                 files
                     .iter()
                     .map(|file| {
-                        CStr::from_ptr(file.name)
+                        let path = CStr::from_ptr(file.path)
                             .to_str()
                             .expect("Failed to get C string")
-                            .to_string()
+                            .to_string();
+                        let priority = match file.priority {
+                            0 => TorrentFilePriority::Skip,
+                            1 => TorrentFilePriority::Low,
+                            4 => TorrentFilePriority::Default,
+                            7 => TorrentFilePriority::High,
+                            _ => TorrentFilePriority::Default,
+                        };
+                        (path, priority)
                     })
                     .collect()
             } else {
