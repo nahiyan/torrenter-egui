@@ -432,6 +432,15 @@ impl eframe::App for AppState {
                                     .unwrap();
                             }
 
+                            // Open directory
+                            if ui
+                                .button("📂")
+                                .on_hover_text("Open containing directory")
+                                .clicked()
+                            {
+                                open::that(torrent.save_path.clone()).unwrap();
+                            }
+
                             // Info button
                             let info_btn = ui.button("ℹ").on_hover_text("Details");
                             let is_selected = Some(index + 1) == self.selection_index;
