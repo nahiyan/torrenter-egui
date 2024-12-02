@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 use torrent::{Torrent, TorrentFilePriority, TorrentState};
+mod peers;
 mod progress_bar;
 mod torrent;
 include!("../bindings.rs");
@@ -119,6 +120,7 @@ enum Message {
     UpdateState(TorrentState, usize),
     ToggleStream(usize),
     ChangeFilePriority(usize, usize, TorrentFilePriority),
+    FetchPeers(usize),
 }
 
 impl Default for AppState {
@@ -226,6 +228,42 @@ impl Default for AppState {
                     );
                     tx_clone.send(Message::ForcedRefresh).unwrap();
                 },
+                Message::FetchPeers(index) => {
+                    let mut num_peers: c_int = 0;
+                    let num_peers_ptr = &mut num_peers;
+                    let torrents = torrents_clone.clone();
+                    let mut torrents = torrents.lock().unwrap();
+                    let peers: &mut Vec<peers::Peer> = &mut torrents[index].peers;
+                    peers.clear();
+                    unsafe {
+                        let c_peers = get_peers(index as c_int, num_peers_ptr);
+                        for i in 0..num_peers {
+                            let c_peer = *c_peers.add(i as usize);
+                            let ip_address = CStr::from_ptr(c_peer.ip_address)
+                                .to_str()
+                                .expect("Failed to process C str")
+                                .to_string();
+                            let client = CStr::from_ptr(c_peer.client)
+                                .to_str()
+                                .expect("Failed to process C str")
+                                .to_string();
+                            let download_rate = c_peer.download_rate;
+                            let upload_rate = c_peer.upload_rate;
+                            let progress = c_peer.progress;
+                            let region = "Test".to_owned();
+                            let peer = peers::Peer {
+                                ip_address,
+                                progress,
+                                client,
+                                download_rate,
+                                upload_rate,
+                                region,
+                            };
+                            peers.push(peer);
+                        }
+                        free_peers(c_peers, num_peers);
+                    }
+                }
             }
         });
 
@@ -256,7 +294,8 @@ impl eframe::App for AppState {
 
         // Bottom panel
         if let Some(index) = self.selection_index {
-            let torrent = &torrents[index - 1];
+            let index = index - 1;
+            let torrent = &torrents[index];
             egui::TopBottomPanel::bottom("torrent_info")
                 .resizable(true)
                 .min_height(200.0)
@@ -345,6 +384,14 @@ impl eframe::App for AppState {
                                     });
                                 }
                             }
+                            Tab::Peers => {
+                                self.channel_tx.send(Message::FetchPeers(index)).unwrap();
+
+                                torrent.peers.iter().for_each(|p| {
+                                    ui.label(p.ip_address.clone());
+                                });
+                            }
+
                             _ => {
                                 ui.vertical(|ui| {
                                     ui.label("Elit Lorem commodo Lorem proident voluptate sunt ad consequat enim.");

@@ -25,6 +25,24 @@ struct TorrentInfo {
   struct File *files;
 };
 
+struct Peer {
+  const char *region;
+  const char *ip_address;
+  const char *client;
+  float progress;
+  long download_rate;
+  long upload_rate;
+};
+
+struct Tracker {
+  int tier;
+  const char *url;
+  int status;
+  int num_peers;
+  int num_seeds;
+  const char *message;
+};
+
 // Lifecycle
 void initiate(const char *resume_dir);
 void destroy();
@@ -39,6 +57,8 @@ void torrent_resume(int index);
 void torrent_remove(int index);
 void toggle_stream(int index);
 void change_file_priority(int, int, int);
+struct Peer *get_peers(int, int *);
+void free_peers(struct Peer *, int);
 
 // Utilities
 const char *libtorrent_version();

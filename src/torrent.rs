@@ -4,6 +4,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::peers;
+
 include!("../bindings.rs");
 
 #[derive(PartialEq, Clone, Debug)]
@@ -29,6 +31,7 @@ pub struct Torrent {
     pub is_streaming: bool,
     pub num_files: i32,
     pub files: Vec<(String, TorrentFilePriority)>,
+    pub peers: Vec<peers::Peer>,
 }
 
 impl Torrent {
@@ -48,6 +51,7 @@ impl Torrent {
             is_streaming: false,
             num_files: 0,
             files: vec![],
+            peers: vec![],
         }
     }
 }

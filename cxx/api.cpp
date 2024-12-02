@@ -31,6 +31,7 @@ struct Torrent {
   string hash;
   string name;
   string save_path;
+  vector<lt::peer_info> peers;
 
   Torrent(lt::torrent_handle &h, lt::add_torrent_params &atp, string hash) {
     this->h = h;
@@ -273,6 +274,7 @@ struct TorrentInfo get_torrent_info(int index) {
   info.is_streaming = (h.flags() & lt::torrent_flags::sequential_download) ==
                       lt::torrent_flags::sequential_download;
 
+  // TODO: Load file information in a separate function
   // Files
   auto file_priorities = h.get_file_priorities();
   if (torrent_info != nullptr) {
@@ -301,6 +303,39 @@ void free_torrent_info(TorrentInfo info) {
   }
   if (info.num_files > 0)
     delete[] info.files;
+}
+
+Peer *get_peers(int index, int *num_peers) {
+  assert(index < state.torrents.size());
+  assert(num_peers != nullptr);
+
+  Torrent *t = state.torrents[index];
+  lt::torrent_handle &h = t->h;
+  h.get_peer_info(t->peers);
+  *num_peers = t->peers.size();
+  Peer *peers = new Peer[*num_peers];
+  for (int i = 0; i < *num_peers; i++) {
+    auto &p = t->peers[i];
+    peers[i].progress = p.progress;
+    peers[i].download_rate = p.down_speed;
+    peers[i].upload_rate = p.up_speed;
+    peers[i].client = p.client.c_str();
+
+    string ip = p.ip.address().to_string();
+    char *ip_c = new char[ip.size() + 1];
+    copy(ip.begin(), ip.end(), ip_c);
+    ip_c[ip.size()] = '\0';
+    peers[i].ip_address = ip_c;
+  }
+
+  return peers;
+}
+
+void free_peers(Peer *peers, int num_peers) {
+  for (int i = 0; i < num_peers; i++) {
+    delete[] peers[i].ip_address;
+  }
+  delete[] peers;
 }
 
 void destroy() {
