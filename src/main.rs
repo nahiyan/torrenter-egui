@@ -305,9 +305,35 @@ impl eframe::App for AppState {
                     ui.add_space(5.0);
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(Align::RIGHT), |ui| {
+                            // Close button
                             if ui.button("✖").clicked() {
                                 self.selection_index = None;
                             }
+
+                            // Tabs
+                            ui.with_layout(Layout::left_to_right(Align::RIGHT), |ui| {
+                                self.tab_view.tabs.iter_mut().for_each(
+                                    |(tab, text, is_hovered)| {
+                                        let rt = {
+                                            let rt = RichText::new(text.clone());
+                                            if tab.clone() == self.tab_view.selected {
+                                                rt.strong().underline()
+                                            } else if is_hovered.clone() {
+                                                rt.underline()
+                                            } else {
+                                                rt
+                                            }
+                                        };
+                                        let label = ui
+                                            .label(rt)
+                                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                                        if label.clicked() {
+                                            self.tab_view.selected = tab.clone();
+                                        }
+                                        *is_hovered = label.hovered();
+                                    },
+                                );
+                            });
                         });
                     });
                     ui.add_space(5.0);
@@ -318,34 +344,9 @@ impl eframe::App for AppState {
                             Sense::focusable_noninteractive(),
                         );
 
-                        ui.horizontal(|ui| {
-                            self.tab_view
-                                .tabs
-                                .iter_mut()
-                                .for_each(|(tab, text, is_hovered)| {
-                                    let rt = {
-                                        let rt = RichText::new(text.clone());
-                                        if tab.clone() == self.tab_view.selected {
-                                            rt.strong().underline()
-                                        } else if is_hovered.clone() {
-                                            rt.underline()
-                                        } else {
-                                            rt
-                                        }
-                                    };
-                                    let label = ui
-                                        .label(rt)
-                                        .on_hover_cursor(egui::CursorIcon::PointingHand);
-                                    if label.clicked() {
-                                        self.tab_view.selected = tab.clone();
-                                    }
-                                    *is_hovered = label.hovered();
-                                });
-                        });
-
                         ui.add_space(5.0);
-                        ui.heading("Torrent Details");
-                        ui.add_space(5.0);
+                        // ui.heading("Torrent Details");
+                        // ui.add_space(5.0);
 
                         match self.tab_view.selected {
                             Tab::General => {
