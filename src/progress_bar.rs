@@ -51,17 +51,21 @@ impl Widget for CompoundProgressBar<'_> {
 
             let mut i = 0;
             for rect in rects {
-                let group = groups[i];
-                let total = group.0 + group.1 + group.2;
-                let i_frac = group.2 as f32 / total as f32;
-                let color = if group.0 > group.1 {
-                    Color32::from_rgb(83, 61, 204)
-                } else if group.1 >= group.0 {
-                    Color32::GREEN
+                // c -> complete
+                // q -> queued
+                // i -> incomplete
+                let (c_pieces, q_pieces, i_pieces) = groups[i];
+                let total = c_pieces + q_pieces + i_pieces;
+                let color = if c_pieces > q_pieces {
+                    Color32::WHITE.lerp_to_gamma(
+                        Color32::from_rgb(83, 61, 204),
+                        c_pieces as f32 / total as f32,
+                    )
+                } else if q_pieces >= c_pieces {
+                    Color32::WHITE.lerp_to_gamma(Color32::GREEN, q_pieces as f32 / total as f32)
                 } else {
                     Color32::WHITE
-                }
-                .lerp_to_gamma(Color32::WHITE, i_frac);
+                };
                 // TODO: Allocate this space in the ui
                 ui.painter().rect_filled(
                     ui.painter().round_rect_to_pixels(rect),
