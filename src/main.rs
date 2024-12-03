@@ -4,6 +4,7 @@
 use eframe::egui;
 use egui::{Align, Align2, Color32, Label, RichText, Sense};
 use egui::{Layout, Vec2};
+use egui_extras::{Column, TableBuilder};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use progress_bar::CompoundProgressBar;
 use std::sync::mpsc::Sender;
@@ -361,10 +362,10 @@ impl eframe::App for AppState {
                                         _ => true,
                                     })
                                     .collect();
-                                for (f_index, file) in torrent.files.iter().enumerate() {
+                                for (f_index, (f_name, _)) in torrent.files.iter().enumerate() {
                                     ui.horizontal(|ui| {
                                         if ui
-                                            .checkbox(&mut files_enabled[f_index], &file.0)
+                                            .checkbox(&mut files_enabled[f_index], f_name)
                                             .changed()
                                         {
                                             let is_enabled = files_enabled[f_index];
@@ -375,9 +376,7 @@ impl eframe::App for AppState {
                                             };
                                             self.channel_tx
                                                 .send(Message::ChangeFilePriority(
-                                                    index - 1,
-                                                    f_index,
-                                                    priority,
+                                                    index, f_index, priority,
                                                 ))
                                                 .unwrap();
                                         }
@@ -387,14 +386,58 @@ impl eframe::App for AppState {
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();
 
-                                torrent.peers.iter().for_each(|p| {
-                                    ui.label(p.ip_address.clone());
-                                });
+                                TableBuilder::new(ui)
+                                    .striped(true)
+                                    .auto_shrink(true)
+                                    .vscroll(false)
+                                    .column(Column::remainder().resizable(true))
+                                    .column(Column::auto().resizable(true))
+                                    .column(Column::auto().resizable(true))
+                                    .column(Column::auto().resizable(true).at_least(100.0))
+                                    .column(Column::auto().resizable(true))
+                                    .header(20.0, |mut header| {
+                                        header.col(|ui| {
+                                            ui.label(RichText::new("IP Address").strong());
+                                        });
+                                        header.col(|ui| {
+                                            ui.label(RichText::new("Download Rate").strong());
+                                        });
+                                        header.col(|ui| {
+                                            ui.label(RichText::new("Upload Rate").strong());
+                                        });
+                                        header.col(|ui| {
+                                            ui.label(RichText::new("Client").strong());
+                                        });
+                                        header.col(|ui| {
+                                            ui.label(RichText::new("Progress").strong());
+                                        });
+                                    })
+                                    .body(|mut body| {
+                                        torrent.peers.iter().for_each(|p| {
+                                            body.row(30.0, |mut row| {
+                                                row.col(|ui| {
+                                                    ui.label(p.ip_address.clone());
+                                                });
+                                                row.col(|ui| {
+                                                    ui.label(format_bytes!(p.download_rate, "/s"));
+                                                });
+                                                row.col(|ui| {
+                                                    ui.label(format_bytes!(p.upload_rate, "/s"));
+                                                });
+                                                row.col(|ui| {
+                                                    ui.label(p.client.clone());
+                                                });
+                                                row.col(|ui| {
+                                                    ui.label(format!("{:.2}%", p.progress * 100.0));
+                                                });
+                                            });
+                                        });
+                                    });
                             }
 
                             _ => {
                                 ui.vertical(|ui| {
-                                    ui.label("Elit Lorem commodo Lorem proident voluptate sunt ad consequat enim.");
+                                    ui.label("Lorem ipsum.");
                                 });
                             }
                         }
