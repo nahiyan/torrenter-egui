@@ -19,8 +19,10 @@ use std::{
     time::Duration,
 };
 use torrent::{Torrent, TorrentFilePriority, TorrentState};
+mod fs_tree;
 mod peers;
 mod progress_bar;
+mod tests;
 mod torrent;
 include!("../bindings.rs");
 
@@ -358,10 +360,7 @@ impl eframe::App for AppState {
                                 let mut files_enabled: Vec<bool> = torrent
                                     .files
                                     .iter()
-                                    .map(|f| match f.1 {
-                                        TorrentFilePriority::Skip => false,
-                                        _ => true,
-                                    })
+                                    .map(|(_, priority)| *priority != TorrentFilePriority::Skip)
                                     .collect();
                                 for (f_index, (f_name, _)) in torrent.files.iter().enumerate() {
                                     ui.horizontal(|ui| {
