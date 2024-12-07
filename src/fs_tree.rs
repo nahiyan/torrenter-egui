@@ -44,7 +44,7 @@ impl Tree {
         for path in paths {
             let path_comps = path.components();
             // let num_comps = path_comps.clone().count();
-            let mut parent = root.children.clone();
+            let mut current_children = root.children.clone();
             for (index, path_comp) in path_comps.enumerate() {
                 let name = path_comp.as_os_str().to_str().unwrap().to_string();
                 let level = index as u32 + 1;
@@ -52,7 +52,7 @@ impl Tree {
 
                 let comp = {
                     let new_comp = Tree::new(name, level);
-                    if let Some(existing_comp) = parent.borrow().get(&new_comp) {
+                    if let Some(existing_comp) = current_children.borrow().get(&new_comp) {
                         existing_comp.to_owned()
                     } else {
                         new_comp
@@ -60,8 +60,8 @@ impl Tree {
                 };
 
                 let comp_children = comp.children.clone();
-                parent.borrow_mut().insert(comp);
-                parent = comp_children;
+                current_children.borrow_mut().insert(comp);
+                current_children = comp_children;
             }
         }
         root
