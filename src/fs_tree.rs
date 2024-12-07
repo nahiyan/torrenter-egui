@@ -36,11 +36,7 @@ impl Tree {
     }
 
     pub fn from_name(name: String) -> Self {
-        Self {
-            name,
-            level: 0,
-            children: Rc::new(RefCell::new(HashSet::new())),
-        }
+        Self::new(name, 0)
     }
 
     pub fn from_paths(paths: Vec<&Path>) -> Self {
@@ -72,10 +68,7 @@ impl Tree {
     }
 
     pub fn display(&self) {
-        let indent = (0..self.level)
-            .map(|_| "——".to_owned())
-            .fold("".to_owned(), |a, b| a + &b)
-            .to_owned();
+        let indent = "—".repeat(self.level as usize);
         println!(
             "{}{} | {} children",
             indent,
