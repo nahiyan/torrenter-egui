@@ -1,82 +1,79 @@
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    hash::{Hash, Hasher},
-    path::Path,
-    rc::Rc,
-};
+use std::{collections::HashMap, path::Path};
 
-#[derive(Clone, Eq)]
-pub struct Tree {
+enum ErrAddChild {
+    ParentNotFound,
+    ChildExists(usize),
+}
+
+pub struct TreeNode {
     pub name: String,
-    pub level: u32,
-    // is_dir: bool,
-    pub children: Rc<RefCell<HashSet<Tree>>>,
+    pub children_indices: Vec<usize>,
+    pub children_names: HashMap<String, usize>,
 }
 
-impl Hash for Tree {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-    }
-}
-
-impl PartialEq for Tree {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
+pub struct Tree {
+    pub nodes: Vec<TreeNode>,
 }
 
 impl Tree {
-    fn new(name: String, level: u32) -> Self {
-        Self {
-            name,
-            level,
-            children: Rc::new(RefCell::new(HashSet::new())),
+    fn new() -> Self {
+        let root = TreeNode {
+            name: "root".to_string(),
+            children_indices: vec![],
+            children_names: HashMap::new(),
+        };
+        Tree { nodes: vec![root] }
+    }
+
+    fn add_child(&mut self, parent_id: usize, name: String) -> Result<usize, ErrAddChild> {
+        assert!(!self.nodes.is_empty());
+        let id = self.nodes.len() as usize;
+
+        let new_node = TreeNode {
+            name: name.clone(),
+            children_indices: vec![],
+            children_names: HashMap::new(),
+        };
+
+        // Add to the parent
+        let parent = self.nodes.get_mut(parent_id);
+        match parent {
+            Some(parent) => {
+                // Add only if parent has no such child
+                let child_lookup = parent.children_names.get(&name);
+                match child_lookup {
+                    None => {
+                        parent.children_names.insert(name, id);
+                        parent.children_indices.push(id);
+                        self.nodes.push(new_node);
+                        Ok(id)
+                    }
+                    Some(existing_id) => Err(ErrAddChild::ChildExists(*existing_id)),
+                }
+            }
+            None => Err(ErrAddChild::ParentNotFound),
         }
     }
 
-    pub fn from_name(name: String) -> Self {
-        Self::new(name, 0)
-    }
-
-    pub fn from_paths(paths: Vec<&Path>) -> Self {
-        let root = Tree::new("root".to_owned(), 0);
+    pub fn from_paths(paths: Vec<&Path>) -> Result<Self, ()> {
+        let mut tree = Tree::new();
         for path in paths {
-            let path_comps = path.components();
-            // let num_comps = path_comps.clone().count();
-            let mut current_children = root.children.clone();
-            for (index, path_comp) in path_comps.enumerate() {
+            let mut parent_id = 0;
+            for path_comp in path.components() {
                 let name = path_comp.as_os_str().to_str().unwrap().to_string();
-                let level = index as u32 + 1;
-                // let is_dir = index != num_comps - 1;
 
-                let comp = {
-                    let new_comp = Tree::new(name, level);
-                    if let Some(existing_comp) = current_children.borrow().get(&new_comp) {
-                        existing_comp.to_owned()
-                    } else {
-                        new_comp
+                let result = tree.add_child(parent_id, name.clone());
+                match result {
+                    Ok(id) => {
+                        parent_id = id;
                     }
-                };
-
-                let comp_children = comp.children.clone();
-                current_children.borrow_mut().insert(comp);
-                current_children = comp_children;
+                    Err(ErrAddChild::ChildExists(id)) => {
+                        parent_id = id;
+                    }
+                    Err(ErrAddChild::ParentNotFound) => return Err(()),
+                }
             }
         }
-        root
-    }
-
-    pub fn display(&self) {
-        let indent = "—".repeat(self.level as usize);
-        println!(
-            "{}{} | {} children",
-            indent,
-            self.name,
-            self.children.borrow().len()
-        );
-        for child in self.children.borrow().iter() {
-            child.display();
-        }
+        Ok(tree)
     }
 }

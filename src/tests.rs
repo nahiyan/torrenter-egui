@@ -22,46 +22,42 @@ mod tests {
         ];
 
         let tree = Tree::from_paths(paths);
-        // Tree should have 2 children: Season 1, Season 2.
-        assert!(tree.children.borrow().len() == 2);
-        let root_children = tree.children.borrow();
-        let s1 = root_children.get(&Tree::from_name("Season 1".to_string()));
-        assert!(s1.is_some());
+        assert!(tree.is_ok());
+        let tree = tree.unwrap();
 
-        let s2 = root_children.get(&Tree::from_name("Season 2".to_string()));
+        // Tree should have 2 children: Season 1, Season 2.
+        let root = &tree.nodes[0];
+        assert_eq!(root.name, "root".to_string());
+        assert!(root.children_indices.len() == 2);
+
+        // Season 1 and 2 should exist
+        let s1 = root.children_names.get("Season 1");
+        let s2 = root.children_names.get("Season 2");
+        assert!(s1.is_some());
         assert!(s2.is_some());
 
-        let s1 = s1.expect("Failed to unwrap Season 1");
-        let s1_children = s1.children.borrow();
-        let s2 = s2.expect("Failed to unwrap Season 2");
-        let s2_children = s2.children.borrow();
+        // Season 1 should have 4 children
+        let s1 = &tree.nodes[*s1.unwrap()];
+        assert!(s1.children_indices.len() == 4);
+        assert!(s1.children_names.contains_key("a.mkv"));
+        assert!(s1.children_names.contains_key("b.mkv"));
+        assert!(s1.children_names.contains_key("c.mkv"));
+        assert!(s1.children_names.contains_key("d.mkv"));
 
-        // Season 1 and 2 should have a, b, c, and d.
-        let a = Tree::from_name("a.mkv".to_string());
-        let b = Tree::from_name("b.mkv".to_string());
-        let c = Tree::from_name("c.mkv".to_string());
-        let d = Tree::from_name("d.mkv".to_string());
-        assert!(s1_children.contains(&a));
-        assert!(s1_children.contains(&b));
-        assert!(s1_children.contains(&c));
-        assert!(s1_children.contains(&d));
-        assert!(s2_children.contains(&a));
-        assert!(s2_children.contains(&b));
-        assert!(s2_children.contains(&c));
-        assert!(s2_children.contains(&d));
+        // Season 2 should have 5 children
+        let s2 = &tree.nodes[*s2.unwrap()];
+        assert!(s2.children_indices.len() == 5);
+        assert!(s2.children_names.contains_key("a.mkv"));
+        assert!(s2.children_names.contains_key("b.mkv"));
+        assert!(s2.children_names.contains_key("c.mkv"));
+        assert!(s2.children_names.contains_key("d.mkv"));
+        assert!(s2.children_names.contains_key("bonus"));
 
-        // Season 2 should have bonus.
-        let bonus = Tree::from_name("bonus".to_string());
-        assert!(s2_children.contains(&bonus));
-
-        // Bonus should have a, b, c, and d.
-        let bonus = s2_children
-            .get(&bonus)
-            .expect("Failed to get Season 2/bonus");
-        let bonus_children = bonus.children.borrow();
-        assert!(bonus_children.contains(&a));
-        assert!(bonus_children.contains(&b));
-        assert!(bonus_children.contains(&c));
-        assert!(bonus_children.contains(&d));
+        // Bonus should have 4 children
+        let bonus = &tree.nodes[*s2.children_names.get("bonus").unwrap()];
+        assert!(bonus.children_names.contains_key("a.mkv"));
+        assert!(bonus.children_names.contains_key("b.mkv"));
+        assert!(bonus.children_names.contains_key("c.mkv"));
+        assert!(bonus.children_names.contains_key("d.mkv"));
     }
 }
