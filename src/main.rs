@@ -2,10 +2,11 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{Align, Align2, Color32, Label, RichText, Sense};
+use egui::{Align, Align2, CollapsingHeader, Color32, Label, RichText, Sense, Ui};
 use egui::{Layout, Vec2};
 use egui_extras::{Column, TableBuilder};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
+use fs_tree::{FSTree, FSTreeNode};
 use progress_bar::CompoundProgressBar;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
@@ -347,8 +348,6 @@ impl eframe::App for AppState {
                         );
 
                         ui.add_space(5.0);
-                        // ui.heading("Torrent Details");
-                        // ui.add_space(5.0);
 
                         match self.tab_view.selected {
                             Tab::General => {
@@ -357,31 +356,73 @@ impl eframe::App for AppState {
                                 });
                             }
                             Tab::Files => {
-                                let mut files_enabled: Vec<bool> = torrent
-                                    .files
-                                    .iter()
-                                    .map(|(_, priority)| *priority != TorrentFilePriority::Skip)
-                                    .collect();
-                                for (f_index, (f_name, _)) in torrent.files.iter().enumerate() {
-                                    ui.horizontal(|ui| {
-                                        if ui
-                                            .checkbox(&mut files_enabled[f_index], f_name)
-                                            .changed()
-                                        {
-                                            let is_enabled = files_enabled[f_index];
-                                            let priority = if is_enabled {
-                                                TorrentFilePriority::Default
-                                            } else {
-                                                TorrentFilePriority::Skip
-                                            };
-                                            self.channel_tx
-                                                .send(Message::ChangeFilePriority(
-                                                    index, f_index, priority,
-                                                ))
-                                                .unwrap();
-                                        }
-                                    });
-                                }
+                                let paths = torrent.files.iter().map(|(name, _)| name).collect();
+                                let tree = FSTree::from_paths(paths);
+                                match tree {
+                                    Ok(tree) => {
+                                        assert!(!tree.nodes.is_empty());
+
+                                        let mut draw_tree = |tree: FSTree| {
+                                            fn draw_node(
+                                                node: &FSTreeNode,
+                                                tree: &FSTree,
+                                                ui: &mut Ui,
+                                            ) {
+                                                if node.is_dir {
+                                                    CollapsingHeader::new(&node.name)
+                                                        .default_open(true)
+                                                        .show(ui, |ui| {
+                                                            for index in &node.children_indices {
+                                                                let child_node =
+                                                                    &tree.nodes[*index];
+                                                                draw_node(child_node, tree, ui);
+                                                            }
+                                                        });
+                                                } else {
+                                                    ui.label(&node.name);
+                                                }
+                                            }
+
+                                            let root = &tree.nodes[0];
+                                            for index in &root.children_indices {
+                                                let root_child = &tree.nodes[*index];
+                                                draw_node(root_child, &tree, ui);
+                                            }
+                                        };
+
+                                        draw_tree(tree);
+                                    }
+                                    Err(()) => {
+                                        ui.label("Failed to load files.");
+                                    }
+                                };
+
+                                // ui.add(CollapsingHeader::new())
+                                // let mut files_enabled: Vec<bool> = torrent
+                                //     .files
+                                //     .iter()
+                                //     .map(|(_, priority)| *priority != TorrentFilePriority::Skip)
+                                //     .collect();
+                                // for (f_index, (f_name, _)) in torrent.files.iter().enumerate() {
+                                //     ui.horizontal(|ui| {
+                                //         if ui
+                                //             .checkbox(&mut files_enabled[f_index], f_name)
+                                //             .changed()
+                                //         {
+                                //             let is_enabled = files_enabled[f_index];
+                                //             let priority = if is_enabled {
+                                //                 TorrentFilePriority::Default
+                                //             } else {
+                                //                 TorrentFilePriority::Skip
+                                //             };
+                                //             self.channel_tx
+                                //                 .send(Message::ChangeFilePriority(
+                                //                     index, f_index, priority,
+                                //                 ))
+                                //                 .unwrap();
+                                //         }
+                                //     });
+                                // }
                             }
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();

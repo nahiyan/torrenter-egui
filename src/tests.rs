@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::fs_tree::Tree;
+    use crate::fs_tree::FSTree;
 
     use std::path::Path;
 
@@ -21,13 +21,14 @@ mod tests {
             Path::new("Season 2/bonus/d.mkv"),
         ];
 
-        let tree = Tree::from_paths(paths);
+        let tree = FSTree::from_paths(paths);
         assert!(tree.is_ok());
         let tree = tree.unwrap();
 
         // Tree should have 2 children: Season 1, Season 2.
         let root = &tree.nodes[0];
         assert_eq!(root.name, "root".to_string());
+        assert!(root.is_dir);
         assert!(root.children_indices.len() == 2);
 
         // Season 1 and 2 should exist
@@ -38,6 +39,7 @@ mod tests {
 
         // Season 1 should have 4 children
         let s1 = &tree.nodes[*s1.unwrap()];
+        assert!(s1.is_dir);
         assert!(s1.children_indices.len() == 4);
         assert!(s1.children_names.contains_key("a.mkv"));
         assert!(s1.children_names.contains_key("b.mkv"));
@@ -46,6 +48,7 @@ mod tests {
 
         // Season 2 should have 5 children
         let s2 = &tree.nodes[*s2.unwrap()];
+        assert!(s2.is_dir);
         assert!(s2.children_indices.len() == 5);
         assert!(s2.children_names.contains_key("a.mkv"));
         assert!(s2.children_names.contains_key("b.mkv"));
@@ -55,6 +58,7 @@ mod tests {
 
         // Bonus should have 4 children
         let bonus = &tree.nodes[*s2.children_names.get("bonus").unwrap()];
+        assert!(bonus.is_dir);
         assert!(bonus.children_names.contains_key("a.mkv"));
         assert!(bonus.children_names.contains_key("b.mkv"));
         assert!(bonus.children_names.contains_key("c.mkv"));
