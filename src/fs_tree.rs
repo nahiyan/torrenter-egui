@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 enum ErrAddChild {
     ParentNotFound,
@@ -8,6 +11,7 @@ enum ErrAddChild {
 pub struct FSTreeNode {
     pub name: String,
     pub is_dir: bool,
+    pub path_id: usize,
     pub children_indices: Vec<usize>,
     pub children_names: HashMap<String, usize>,
 }
@@ -21,6 +25,7 @@ impl FSTree {
         let root = FSTreeNode {
             name: "root".to_string(),
             is_dir: true,
+            path_id: 0,
             children_indices: vec![],
             children_names: HashMap::new(),
         };
@@ -32,6 +37,7 @@ impl FSTree {
         parent_id: usize,
         name: String,
         is_dir: bool,
+        path_id: usize,
     ) -> Result<usize, ErrAddChild> {
         assert!(!self.nodes.is_empty());
         let id = self.nodes.len() as usize;
@@ -39,6 +45,7 @@ impl FSTree {
         let new_node = FSTreeNode {
             name: name.clone(),
             is_dir,
+            path_id,
             children_indices: vec![],
             children_names: HashMap::new(),
         };
@@ -68,6 +75,7 @@ impl FSTree {
         T: Into<PathBuf>,
     {
         let mut tree = FSTree::new();
+        let mut path_id = 0;
         for path in paths {
             let path: PathBuf = path.into();
             let mut parent_id = 0;
@@ -81,7 +89,7 @@ impl FSTree {
                     path.is_dir()
                 };
 
-                let result = tree.add_child(parent_id, name.clone(), is_dir);
+                let result = tree.add_child(parent_id, name.clone(), is_dir, path_id);
                 match result {
                     Ok(id) => {
                         parent_id = id;
@@ -92,7 +100,16 @@ impl FSTree {
                     Err(ErrAddChild::ParentNotFound) => return Err(()),
                 }
             }
+            path_id += 1;
         }
         Ok(tree)
+    }
+
+    pub fn path_ids(&self, node: &FSTreeNode, ids: &mut HashSet<usize>) {
+        ids.insert(node.path_id);
+        for index in &node.children_indices {
+            let node = &self.nodes[*index];
+            self.path_ids(node, ids);
+        }
     }
 }

@@ -2,7 +2,7 @@
 mod tests {
     use crate::fs_tree::FSTree;
 
-    use std::path::Path;
+    use std::{collections::HashSet, path::Path};
 
     #[test]
     fn test_fs_tree() {
@@ -29,7 +29,7 @@ mod tests {
         let root = &tree.nodes[0];
         assert_eq!(root.name, "root".to_string());
         assert!(root.is_dir);
-        assert!(root.children_indices.len() == 2);
+        assert_eq!(root.children_indices.len(), 2);
 
         // Season 1 and 2 should exist
         let s1 = root.children_names.get("Season 1");
@@ -39,29 +39,67 @@ mod tests {
 
         // Season 1 should have 4 children
         let s1 = &tree.nodes[*s1.unwrap()];
+        assert_eq!(s1.path_id, 0);
         assert!(s1.is_dir);
-        assert!(s1.children_indices.len() == 4);
+        assert_eq!(s1.children_indices.len(), 4);
         assert!(s1.children_names.contains_key("a.mkv"));
         assert!(s1.children_names.contains_key("b.mkv"));
         assert!(s1.children_names.contains_key("c.mkv"));
         assert!(s1.children_names.contains_key("d.mkv"));
+        assert_eq!(tree.nodes[s1.children_names["a.mkv"]].path_id, 0);
+        assert_eq!(tree.nodes[s1.children_names["b.mkv"]].path_id, 1);
+        assert_eq!(tree.nodes[s1.children_names["c.mkv"]].path_id, 2);
+        assert_eq!(tree.nodes[s1.children_names["d.mkv"]].path_id, 3);
+
+        let mut s1_path_ids = HashSet::<usize>::new();
+        tree.path_ids(s1, &mut s1_path_ids);
+        assert_eq!(
+            s1_path_ids,
+            vec![0, 1, 2, 3].into_iter().collect::<HashSet<usize>>()
+        );
 
         // Season 2 should have 5 children
         let s2 = &tree.nodes[*s2.unwrap()];
+        assert_eq!(s2.path_id, 4);
         assert!(s2.is_dir);
-        assert!(s2.children_indices.len() == 5);
+        assert_eq!(s2.children_indices.len(), 5);
         assert!(s2.children_names.contains_key("a.mkv"));
         assert!(s2.children_names.contains_key("b.mkv"));
         assert!(s2.children_names.contains_key("c.mkv"));
         assert!(s2.children_names.contains_key("d.mkv"));
         assert!(s2.children_names.contains_key("bonus"));
+        assert_eq!(tree.nodes[s2.children_names["a.mkv"]].path_id, 4);
+        assert_eq!(tree.nodes[s2.children_names["b.mkv"]].path_id, 5);
+        assert_eq!(tree.nodes[s2.children_names["c.mkv"]].path_id, 6);
+        assert_eq!(tree.nodes[s2.children_names["d.mkv"]].path_id, 7);
+
+        let mut s2_path_ids = HashSet::<usize>::new();
+        tree.path_ids(s2, &mut s2_path_ids);
+        assert_eq!(
+            s2_path_ids,
+            vec![4, 5, 6, 7, 8, 9, 10, 11]
+                .into_iter()
+                .collect::<HashSet<usize>>()
+        );
 
         // Bonus should have 4 children
         let bonus = &tree.nodes[*s2.children_names.get("bonus").unwrap()];
+        assert_eq!(bonus.path_id, 8);
         assert!(bonus.is_dir);
         assert!(bonus.children_names.contains_key("a.mkv"));
         assert!(bonus.children_names.contains_key("b.mkv"));
         assert!(bonus.children_names.contains_key("c.mkv"));
         assert!(bonus.children_names.contains_key("d.mkv"));
+        assert_eq!(tree.nodes[bonus.children_names["a.mkv"]].path_id, 8);
+        assert_eq!(tree.nodes[bonus.children_names["b.mkv"]].path_id, 9);
+        assert_eq!(tree.nodes[bonus.children_names["c.mkv"]].path_id, 10);
+        assert_eq!(tree.nodes[bonus.children_names["d.mkv"]].path_id, 11);
+
+        let mut bonus_path_ids = HashSet::<usize>::new();
+        tree.path_ids(bonus, &mut bonus_path_ids);
+        assert_eq!(
+            bonus_path_ids,
+            vec![8, 9, 10, 11].into_iter().collect::<HashSet<usize>>()
+        );
     }
 }
