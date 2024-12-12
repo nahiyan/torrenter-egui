@@ -2,12 +2,13 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{Align, Align2, CollapsingHeader, Color32, Label, RichText, Sense, Ui};
+use egui::{Align, Align2, CollapsingHeader, Color32, Event, Label, RichText, Sense, Ui};
 use egui::{Layout, Vec2};
 use egui_extras::{Column, TableBuilder};
 use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
 use fs_tree::{FSTree, FSTreeNode};
 use progress_bar::CompoundProgressBar;
+use rfd::FileDialog;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 use std::{
@@ -20,13 +21,18 @@ use std::{
     time::Duration,
 };
 use torrent::{Torrent, TorrentFilePriority, TorrentState};
+use views::drop::DropWidget;
 mod fs_tree;
 mod peers;
 mod progress_bar;
 mod tests;
 mod torrent;
+mod views;
+use views::files::FilesWidget;
+use views::peers::PeersWidget;
 include!("../bindings.rs");
 
+#[macro_export]
 macro_rules! format_bytes {
     ($bytes: expr, $prefix: literal) => {{
         let tb = i64::pow(10, 12);
@@ -285,7 +291,7 @@ impl Default for AppState {
                     (Tab::Peers, "Peers".to_owned(), false),
                     (Tab::Trackers, "Trackers".to_owned(), false),
                 ],
-                selected: Tab::General,
+                selected: Tab::Files,
             },
         }
     }
@@ -356,124 +362,12 @@ impl eframe::App for AppState {
                                 });
                             }
                             Tab::Files => {
-                                let paths = torrent.files.iter().map(|(name, _)| name).collect();
-                                let tree = FSTree::from_paths(paths);
-                                match tree {
-                                    Ok(tree) => {
-                                        assert!(!tree.nodes.is_empty());
-
-                                        let mut draw_tree = |tree: FSTree| {
-                                            fn draw_node(
-                                                node: &FSTreeNode,
-                                                tree: &FSTree,
-                                                ui: &mut Ui,
-                                            ) {
-                                                if node.is_dir {
-                                                    CollapsingHeader::new(&node.name)
-                                                        .default_open(true)
-                                                        .show(ui, |ui| {
-                                                            for index in &node.children_indices {
-                                                                let child_node =
-                                                                    &tree.nodes[*index];
-                                                                draw_node(child_node, tree, ui);
-                                                            }
-                                                        });
-                                                } else {
-                                                    ui.label(&node.name);
-                                                }
-                                            }
-
-                                            let root = &tree.nodes[0];
-                                            for index in &root.children_indices {
-                                                let root_child = &tree.nodes[*index];
-                                                draw_node(root_child, &tree, ui);
-                                            }
-                                        };
-
-                                        draw_tree(tree);
-                                    }
-                                    Err(()) => {
-                                        ui.label("Failed to load files.");
-                                    }
-                                };
-
-                                // ui.add(CollapsingHeader::new())
-                                // let mut files_enabled: Vec<bool> = torrent
-                                //     .files
-                                //     .iter()
-                                //     .map(|(_, priority)| *priority != TorrentFilePriority::Skip)
-                                //     .collect();
-                                // for (f_index, (f_name, _)) in torrent.files.iter().enumerate() {
-                                //     ui.horizontal(|ui| {
-                                //         if ui
-                                //             .checkbox(&mut files_enabled[f_index], f_name)
-                                //             .changed()
-                                //         {
-                                //             let is_enabled = files_enabled[f_index];
-                                //             let priority = if is_enabled {
-                                //                 TorrentFilePriority::Default
-                                //             } else {
-                                //                 TorrentFilePriority::Skip
-                                //             };
-                                //             self.channel_tx
-                                //                 .send(Message::ChangeFilePriority(
-                                //                     index, f_index, priority,
-                                //                 ))
-                                //                 .unwrap();
-                                //         }
-                                //     });
-                                // }
+                                ui.add(FilesWidget::new(torrent));
                             }
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();
 
-                                TableBuilder::new(ui)
-                                    .striped(true)
-                                    .auto_shrink(true)
-                                    .vscroll(false)
-                                    .column(Column::remainder().resizable(true))
-                                    .column(Column::auto().resizable(true))
-                                    .column(Column::auto().resizable(true))
-                                    .column(Column::auto().resizable(true).at_least(100.0))
-                                    .column(Column::auto().resizable(true))
-                                    .header(20.0, |mut header| {
-                                        header.col(|ui| {
-                                            ui.label(RichText::new("IP Address").strong());
-                                        });
-                                        header.col(|ui| {
-                                            ui.label(RichText::new("Download Rate").strong());
-                                        });
-                                        header.col(|ui| {
-                                            ui.label(RichText::new("Upload Rate").strong());
-                                        });
-                                        header.col(|ui| {
-                                            ui.label(RichText::new("Client").strong());
-                                        });
-                                        header.col(|ui| {
-                                            ui.label(RichText::new("Progress").strong());
-                                        });
-                                    })
-                                    .body(|mut body| {
-                                        torrent.peers.iter().for_each(|p| {
-                                            body.row(30.0, |mut row| {
-                                                row.col(|ui| {
-                                                    ui.label(p.ip_address.clone());
-                                                });
-                                                row.col(|ui| {
-                                                    ui.label(format_bytes!(p.download_rate, "/s"));
-                                                });
-                                                row.col(|ui| {
-                                                    ui.label(format_bytes!(p.upload_rate, "/s"));
-                                                });
-                                                row.col(|ui| {
-                                                    ui.label(p.client.clone());
-                                                });
-                                                row.col(|ui| {
-                                                    ui.label(format!("{:.2}%", p.progress * 100.0));
-                                                });
-                                            });
-                                        });
-                                    });
+                                ui.add(PeersWidget::new(torrent));
                             }
 
                             _ => {
@@ -491,103 +385,64 @@ impl eframe::App for AppState {
             ctx.set_pixels_per_point(1.3);
 
             let mut toasts = Toasts::new()
-                .anchor(Align2::LEFT_TOP, (10.0, 10.0))
+                .anchor(Align2::CENTER_TOP, (10.0, 10.0))
                 .direction(egui::Direction::TopDown);
             egui::ScrollArea::vertical().show(ui, |ui| {
-                // Drag and drop guide
-                // ui.horizontal(|ui| {
-                //     let start_pos = Pos2::new(ui.next_widget_position().x, ui.min_rect().top());
-                //     let drop_rect =
-                //         Rect::from_min_size(start_pos, Vec2::new(ui.available_width(), 50.0));
-                //     let rect = ui.allocate_rect(drop_rect, Sense::hover());
-                //     let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
-                //     // let pasted_content = ctx.input(|i| i.raw.);
-                //     let about_to_drop = !hovering_files.is_empty();
-                //     let color = if about_to_drop {
-                //         Color32::WHITE.gamma_multiply(0.2)
-                //     } else {
-                //         Color32::WHITE.gamma_multiply(0.5)
-                //     };
-                //     let stroke = if about_to_drop {
-                //         Stroke::new(2.0, Color32::GREEN)
-                //     } else {
-                //         Stroke::new(2.0, Color32::WHITE)
-                //     };
-                //     ui.painter()
-                //         .rect(rect.rect, Rounding::from(0.0), color, stroke);
-                // });
-                // ui.add_space(10.0);
+                let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
+                let mut add_btn_clicked = false;
+                ui.add(DropWidget::new(
+                    !hovering_files.is_empty(),
+                    &mut add_btn_clicked,
+                ));
+                ui.add_space(10.0);
 
-                // if ui.button("Open File").clicked() {
-                //     let file = rfd::FileDialog::new()
-                //         .add_filter("torrent", &["torrent"])
-                //         .pick_file();
-                //     if let Some(f) = file {
-                //         println!(
-                //             "File selected: {}",
-                //             f.to_str().expect("Failed to get string from file path.")
-                //         );
-                //     } else {
-                //         println!("No file selected");
-                //     }
-                // }
-
-                ui.heading("Add Torrent ");
-                ui.horizontal(|ui| {
-                    let magnet_url_width =
-                        ui.available_width() - ui.spacing().item_spacing.x - 100.0;
-                    let magnet_url_textbox = egui::TextEdit::singleline(&mut self.magnet_url)
-                        .hint_text("Enter magnet URL here.")
-                        .vertical_align(Align::Center);
-                    let add_btn = egui::Button::new("Add Torrent");
-
-                    // Add magnet URL handler
-                    ui.add_sized(Vec2::new(magnet_url_width, 30.0), magnet_url_textbox);
-                    if ui.add_sized(Vec2::new(100.0, 30.0), add_btn).clicked() {
-                        self.channel_tx
-                            .send(Message::AddTorrent(self.magnet_url.clone()))
-                            .unwrap();
-                        self.magnet_url = "".to_owned();
-
-                        toasts.add(Toast {
-                            text: "Added new torrent.".into(),
-                            kind: ToastKind::Success,
-                            options: ToastOptions::default()
-                                .duration(Duration::from_secs(5))
-                                .show_progress(true),
-                            ..Default::default()
-                        });
+                // TODO: Handle torrent add from a file
+                if add_btn_clicked {
+                    let file = FileDialog::new()
+                        .add_filter("torrent", &["torrent"])
+                        .pick_file();
+                    if let Some(file) = file {
+                        match file.extension() {
+                            Some(extension) => {
+                                if extension == "torrent" {
+                                    // TODO: Handle torrent add from a file
+                                    toasts.add(Toast {
+                                        text: "Added new torrent".into(),
+                                        kind: ToastKind::Success,
+                                        options: ToastOptions::default()
+                                            .duration(Duration::from_secs(5))
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                } else {
+                                    toasts.add(Toast {
+                                        text: "Only .torrent files are accepted.".into(),
+                                        kind: ToastKind::Error,
+                                        options: ToastOptions::default()
+                                            .duration(Duration::from_secs(5))
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                            None => {}
+                        }
                     }
-                });
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
-                ui.heading("Torrents");
-                ui.add_space(5.0);
+                }
 
-                for (index, torrent) in torrents.iter().enumerate() {
-                    let torrent_title = {
-                        let name = if torrent.name == "".to_string() {
-                            &torrent.hash
-                        } else {
-                            &torrent.name
-                        };
-                        let rich_text = RichText::new(name).size(14.0).strong();
-                        Label::new(rich_text).truncate().halign(egui::Align::LEFT)
-                    };
-                    ui.vertical(|ui| {
-                        // Title and controls
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                            // Remove torrent
-                            let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
-                            if remove_btn.clicked() {
+                // Listen for pasted magnet URLs
+                ctx.input(|r| {
+                    for event in &r.events {
+                        match event {
+                            Event::Paste(text) => {
+                                let magnet_uri = text.trim().to_string();
+
                                 self.channel_tx
-                                    .send(Message::RemoveTorrent(index.clone()))
+                                    .send(Message::AddTorrent(magnet_uri))
                                     .unwrap();
-                                self.selection_index = None;
 
                                 toasts.add(Toast {
-                                    text: "Removed torrent.".into(),
+                                    text: "Added new torrent.".into(),
                                     kind: ToastKind::Success,
                                     options: ToastOptions::default()
                                         .duration(Duration::from_secs(5))
@@ -595,130 +450,173 @@ impl eframe::App for AppState {
                                     ..Default::default()
                                 });
                             }
-
-                            // Toggle strewam
-                            let stream_btn = ui
-                                .button(if torrent.is_streaming {
-                                    RichText::new("📶").strong()
-                                } else {
-                                    RichText::new("📶")
-                                })
-                                .on_hover_text("Stream");
-                            if stream_btn.clicked() {
-                                self.channel_tx
-                                    .send(Message::ToggleStream(index.clone()))
-                                    .unwrap();
-                            }
-
-                            // Open directory
-                            if ui
-                                .button("📂")
-                                .on_hover_text("Open containing directory")
-                                .clicked()
-                            {
-                                open::that(torrent.save_path.clone()).unwrap();
-                            }
-
-                            // Info button
-                            let info_btn = ui.button("ℹ").on_hover_text("Details");
-                            let is_selected = Some(index + 1) == self.selection_index;
-
-                            if is_selected {
-                                info_btn.clone().highlight();
-                            }
-                            if info_btn.clicked() {
-                                self.selection_index = if !is_selected {
-                                    self.channel_tx.send(Message::ForcedRefresh).unwrap();
-                                    Some(index + 1)
-                                } else {
-                                    None
-                                };
-                            }
-
-                            // Pause/Resume btn
-                            let state_btn_text = if torrent.state == torrent::TorrentState::Paused {
-                                "▶"
-                            } else {
-                                "⏸"
-                            };
-                            let toggle_state_btn =
-                                ui.button(state_btn_text).on_hover_text("Pause/Resume");
-                            if toggle_state_btn.clicked() {
-                                self.channel_tx
-                                    .send(Message::UpdateState(
-                                        torrent.state.clone(),
-                                        index.clone(),
-                                    ))
-                                    .unwrap();
-                            }
-
-                            ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
-                                ui.add(torrent_title);
-                            })
-                        });
-
-                        // Status
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 0.0;
-
-                            // Color
-                            let state_color = match torrent.state {
-                                TorrentState::Seeding => {
-                                    Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
-                                }
-                                TorrentState::Downloading => {
-                                    Color32::GREEN.lerp_to_gamma(Color32::WHITE, 0.5)
-                                }
-                                TorrentState::Paused => {
-                                    Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.3)
-                                }
-                                TorrentState::QueuedForChecking
-                                | TorrentState::CheckingFiles
-                                | TorrentState::DownloadingMetaData
-                                | TorrentState::Allocating
-                                | TorrentState::CheckingResumeData => {
-                                    Color32::RED.lerp_to_gamma(Color32::WHITE, 0.5)
-                                }
-                                _ => ui.visuals().text_color(),
-                            };
-
-                            // Emoji
-                            let state_emoji = match torrent.state {
-                                TorrentState::Finished => "✅",
-                                TorrentState::Seeding => "🍒",
-                                TorrentState::Downloading => "📩",
-                                TorrentState::Paused => "⏸",
-                                _ => "⭕",
-                            };
-                            ui.label(
-                                RichText::new(format!(
-                                    "{} {}",
-                                    state_emoji,
-                                    torrent.state.to_string()
-                                ))
-                                .color(state_color),
-                            );
-
-                            // Label
-                            ui.label(format!(
-                                " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
-                                format_bytes!(torrent.total_size),
-                                format_bytes!(torrent.download_rate, "/s"),
-                                format_bytes!(torrent.upload_rate, "/s"),
-                                torrent.num_seeds,
-                                torrent.num_seeds
-                            ));
-                        });
-
-                        // Compound progress bar
-                        if torrent.state == TorrentState::DownloadingMetaData
-                            || torrent.state == TorrentState::Allocating
-                        {
-                        } else {
-                            ui.add(CompoundProgressBar::new(torrent));
+                            _ => {}
                         }
-                        ui.add_space(15.0);
-                    });
+                    }
+                });
+
+                if !torrents.is_empty() {
+                    ui.heading("Torrents");
+                    ui.add_space(5.0);
+                    for (index, torrent) in torrents.iter().enumerate() {
+                        let torrent_title = {
+                            let name = if torrent.name == "".to_string() {
+                                &torrent.hash
+                            } else {
+                                &torrent.name
+                            };
+                            let rich_text = RichText::new(name).size(14.0).strong();
+                            Label::new(rich_text).truncate().halign(egui::Align::LEFT)
+                        };
+                        ui.vertical(|ui| {
+                            // Title and controls
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                                // Remove torrent
+                                let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
+                                if remove_btn.clicked() {
+                                    self.channel_tx
+                                        .send(Message::RemoveTorrent(index.clone()))
+                                        .unwrap();
+                                    self.selection_index = None;
+
+                                    toasts.add(Toast {
+                                        text: "Removed torrent.".into(),
+                                        kind: ToastKind::Success,
+                                        options: ToastOptions::default()
+                                            .duration(Duration::from_secs(5))
+                                            .show_progress(true),
+                                        ..Default::default()
+                                    });
+                                }
+
+                                // Toggle strewam
+                                let stream_btn = ui
+                                    .button(if torrent.is_streaming {
+                                        RichText::new("📶").strong()
+                                    } else {
+                                        RichText::new("📶")
+                                    })
+                                    .on_hover_text("Stream");
+                                if stream_btn.clicked() {
+                                    self.channel_tx
+                                        .send(Message::ToggleStream(index.clone()))
+                                        .unwrap();
+                                }
+
+                                // Open directory
+                                if ui
+                                    .button("📂")
+                                    .on_hover_text("Open containing directory")
+                                    .clicked()
+                                {
+                                    open::that(torrent.save_path.clone()).unwrap();
+                                }
+
+                                // Info button
+                                let info_btn = ui.button("ℹ").on_hover_text("Details");
+                                let is_selected = Some(index + 1) == self.selection_index;
+
+                                if is_selected {
+                                    info_btn.clone().highlight();
+                                }
+                                if info_btn.clicked() {
+                                    self.selection_index = if !is_selected {
+                                        self.channel_tx.send(Message::ForcedRefresh).unwrap();
+                                        Some(index + 1)
+                                    } else {
+                                        None
+                                    };
+                                }
+
+                                // Pause/Resume btn
+                                let state_btn_text =
+                                    if torrent.state == torrent::TorrentState::Paused {
+                                        "▶"
+                                    } else {
+                                        "⏸"
+                                    };
+                                let toggle_state_btn =
+                                    ui.button(state_btn_text).on_hover_text("Pause/Resume");
+                                if toggle_state_btn.clicked() {
+                                    self.channel_tx
+                                        .send(Message::UpdateState(
+                                            torrent.state.clone(),
+                                            index.clone(),
+                                        ))
+                                        .unwrap();
+                                }
+
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::TOP),
+                                    |ui| {
+                                        ui.add(torrent_title);
+                                    },
+                                )
+                            });
+
+                            // Status
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 0.0;
+
+                                // Color
+                                let state_color = match torrent.state {
+                                    TorrentState::Seeding => {
+                                        Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
+                                    }
+                                    TorrentState::Downloading => {
+                                        Color32::GREEN.lerp_to_gamma(Color32::WHITE, 0.5)
+                                    }
+                                    TorrentState::Paused => {
+                                        Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.3)
+                                    }
+                                    TorrentState::QueuedForChecking
+                                    | TorrentState::CheckingFiles
+                                    | TorrentState::DownloadingMetaData
+                                    | TorrentState::Allocating
+                                    | TorrentState::CheckingResumeData => {
+                                        Color32::RED.lerp_to_gamma(Color32::WHITE, 0.5)
+                                    }
+                                    _ => ui.visuals().text_color(),
+                                };
+
+                                // Emoji
+                                let state_emoji = match torrent.state {
+                                    TorrentState::Finished => "✅",
+                                    TorrentState::Seeding => "🍒",
+                                    TorrentState::Downloading => "📩",
+                                    TorrentState::Paused => "⏸",
+                                    _ => "⭕",
+                                };
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{} {}",
+                                        state_emoji,
+                                        torrent.state.to_string()
+                                    ))
+                                    .color(state_color),
+                                );
+
+                                // Label
+                                ui.label(format!(
+                                    " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
+                                    format_bytes!(torrent.total_size),
+                                    format_bytes!(torrent.download_rate, "/s"),
+                                    format_bytes!(torrent.upload_rate, "/s"),
+                                    torrent.num_seeds,
+                                    torrent.num_seeds
+                                ));
+                            });
+
+                            // Compound progress bar
+                            if torrent.state == TorrentState::DownloadingMetaData
+                                || torrent.state == TorrentState::Allocating
+                            {
+                            } else {
+                                ui.add(CompoundProgressBar::new(torrent));
+                            }
+                            ui.add_space(15.0);
+                        });
+                    }
                 }
             });
 
