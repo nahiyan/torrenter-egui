@@ -2,24 +2,23 @@ use egui::{CollapsingHeader, Response, Ui, Widget};
 
 use crate::{
     fs_tree::{FSTree, FSTreeNode},
-    torrent::{Torrent, TorrentFilePriority},
+    torrent::TorrentFilePriority,
 };
 
 pub struct FilesWidget<'a> {
-    torrent: &'a Torrent,
+    files: &'a Vec<(String, TorrentFilePriority)>,
 }
 
 impl<'a> FilesWidget<'a> {
-    pub fn new(torrent: &'a Torrent) -> Self {
-        Self { torrent }
+    pub fn new(files: &'a Vec<(String, TorrentFilePriority)>) -> Self {
+        Self { files }
     }
 }
 
 impl<'a> Widget for FilesWidget<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let paths = self.torrent.files.iter().map(|(name, _)| name).collect();
+        let paths = self.files.iter().map(|(name, _)| name).collect();
         let mut file_priorities: Vec<bool> = self
-            .torrent
             .files
             .iter()
             .map(|(_, priority)| !matches!(priority, TorrentFilePriority::Skip))

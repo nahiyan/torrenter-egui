@@ -361,7 +361,7 @@ impl eframe::App for AppState {
                                 });
                             }
                             Tab::Files => {
-                                ui.add(FilesWidget::new(torrent));
+                                ui.add(FilesWidget::new(&torrent.files));
                             }
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();
