@@ -11,6 +11,7 @@ fn main() {
     println!("cargo:rustc-link-lib=static=torrent-rasterbar");
 
     // indirect dependencies
+    // println!("cargo:rustc-link-lib=asan");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
     println!("cargo:rustc-link-lib=stdc++");
