@@ -48,6 +48,7 @@ void initiate(const char *resume_dir);
 void destroy();
 
 // Torrent management
+const char *add_file(const char *file_path, const char *save_path);
 const char *add_magnet_url(const char *url, const char *save_path);
 int get_count();
 void handle_alerts();

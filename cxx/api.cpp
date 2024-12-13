@@ -9,6 +9,7 @@
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/download_priority.hpp>
 #include <libtorrent/file_storage.hpp>
+#include <libtorrent/load_torrent.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/read_resume_data.hpp>
 #include <libtorrent/session.hpp>
@@ -125,6 +126,17 @@ void initiate(const char *resume_dir) {
   } catch (const fs::filesystem_error &e) {
     printf("Failed to read resume files.\n");
   }
+}
+
+const char *add_file(const char *file_path, const char *save_path) {
+  lt::add_torrent_params atp = lt::load_torrent_file(file_path);
+  atp.save_path = save_path;
+  lt::torrent_handle h = state.ses->add_torrent(atp);
+  string hash = get_hash(h);
+  Torrent *t = new Torrent(h, atp, hash);
+  state.torrents.push_back(t);
+  write_resume_file(h, atp);
+  return t->hash.c_str();
 }
 
 const char *add_magnet_url(const char *url, const char *save_path) {

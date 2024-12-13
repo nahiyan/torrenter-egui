@@ -2,7 +2,7 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{Align, Align2, Color32, Event, Label, RichText, Sense};
+use egui::{Align, Align2, Color32, DroppedFile, Event, Label, RichText, Sense};
 use egui::{Layout, Vec2};
 use egui_toast::Toasts;
 use progress_bar::CompoundProgressBar;
@@ -19,7 +19,7 @@ use std::{
     time::Duration,
 };
 use torrent::{Torrent, TorrentFilePriority, TorrentState};
-use views::drop::DropWidget;
+use views::add_torrent::AddTorrentWidget;
 mod fs_tree;
 mod peers;
 mod progress_bar;
@@ -119,12 +119,18 @@ struct AppState {
     tab_view: TabView,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
+enum AddTorrentKind {
+    File,
+    MagnetUrl,
+}
+
+#[derive(PartialEq)]
 enum Message {
     Stop,
     Refresh,
     ForcedRefresh,
-    AddTorrent(String),
+    AddTorrent(String, AddTorrentKind),
     RemoveTorrent(usize),
     UpdateState(TorrentState, usize),
     ToggleStream(usize),
@@ -181,30 +187,49 @@ impl Default for AppState {
                         last_refresh = now;
                     }
                 }
-                Message::AddTorrent(magnet_url) => {
+                Message::AddTorrent(path, kind) => {
                     let downloads_dir = dirs::download_dir()
                         .expect("Failed to get downloads dir.")
                         .to_str()
                         .expect("Failed to convert to string")
                         .to_owned();
-                    let magnet_url_cstr =
-                        CString::new(magnet_url).expect("Failed to create CString");
                     let downloads_dir_cstr =
                         CString::new(downloads_dir.clone()).expect("Failed to create CString");
                     let mut torrent = Torrent::new("".to_owned(), downloads_dir);
-                    // TODO: Handle errors
-                    torrent.hash = unsafe {
-                        let hash_cstr =
-                            add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
-                        CStr::from_ptr(hash_cstr)
-                            .to_str()
-                            .expect("Failed to work with cstr")
-                            .to_string()
-                    };
+                    let path_cstr = CString::new(path).expect("Failed to create CString");
+
+                    match kind {
+                        AddTorrentKind::MagnetUrl => {
+                            let magnet_url_cstr = path_cstr;
+                            // TODO: Handle errors
+                            torrent.hash = unsafe {
+                                let hash_cstr = add_magnet_url(
+                                    magnet_url_cstr.as_ptr(),
+                                    downloads_dir_cstr.as_ptr(),
+                                );
+                                CStr::from_ptr(hash_cstr)
+                                    .to_str()
+                                    .expect("Failed to work with cstr")
+                                    .to_string()
+                            };
+                        }
+                        AddTorrentKind::File => {
+                            let file_path_cstr = path_cstr;
+                            // TODO: Handle errors
+                            torrent.hash = unsafe {
+                                let hash_cstr =
+                                    add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
+                                CStr::from_ptr(hash_cstr)
+                                    .to_str()
+                                    .expect("Failed to work with cstr")
+                                    .to_string()
+                            };
+                        }
+                    }
                     tx_clone.send(Message::ForcedRefresh).unwrap();
                 }
                 Message::UpdateState(state, index) => {
-                    if state == torrent::TorrentState::Paused {
+                    if state == TorrentState::Paused {
                         unsafe {
                             torrent_resume(index as c_int);
                         }
@@ -383,24 +408,51 @@ impl eframe::App for AppState {
                 .anchor(Align2::CENTER_TOP, (10.0, 10.0))
                 .direction(egui::Direction::TopDown);
             egui::ScrollArea::vertical().show(ui, |ui| {
-                let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
+                // Handle drag and drop
+                let has_hovering_files = ctx.input(|i| !i.raw.hovered_files.is_empty());
                 let mut add_btn_clicked = false;
-                ui.add(DropWidget::new(
-                    !hovering_files.is_empty(),
+                ui.add(AddTorrentWidget::new(
+                    has_hovering_files,
                     &mut add_btn_clicked,
                 ));
+                let dropped_files = ctx.input(|r| r.raw.dropped_files.clone());
+                if let Some(DroppedFile {
+                    path: Some(file_path),
+                    mime: _,
+                    name: _,
+                    last_modified: _,
+                    bytes: _,
+                }) = dropped_files.first()
+                {
+                    let file_path = file_path
+                        .to_str()
+                        .expect("Failed to convert path to str")
+                        .to_string();
+                    self.channel_tx
+                        .send(Message::AddTorrent(file_path, AddTorrentKind::File))
+                        .unwrap();
+                    toasts::success(&mut toasts, "Added the new torrent.");
+                }
                 ui.add_space(10.0);
 
-                // TODO: Handle torrent add from a file
+                // Handle "torrent add" from a file
                 if add_btn_clicked {
-                    let file = FileDialog::new()
+                    let file_path = FileDialog::new()
                         .add_filter("torrent", &["torrent"])
                         .pick_file();
-                    if let Some(file) = file {
-                        match file.extension() {
+                    if let Some(file_path) = file_path {
+                        match file_path.extension() {
                             Some(extension) => {
                                 if extension == "torrent" {
-                                    // TODO: Handle torrent add from a file
+                                    self.channel_tx
+                                        .send(Message::AddTorrent(
+                                            file_path
+                                                .to_str()
+                                                .expect("Failed to convert path to str")
+                                                .to_string(),
+                                            AddTorrentKind::File,
+                                        ))
+                                        .unwrap();
                                     toasts::success(&mut toasts, "Added the new torrent.");
                                 } else {
                                     toasts::error(&mut toasts, "Only .torrent files are accepted.");
@@ -416,9 +468,12 @@ impl eframe::App for AppState {
                     for event in &r.events {
                         match event {
                             Event::Paste(text) => {
-                                let magnet_uri = text.trim().to_string();
+                                let magnet_url = text.trim().to_string();
                                 self.channel_tx
-                                    .send(Message::AddTorrent(magnet_uri))
+                                    .send(Message::AddTorrent(
+                                        magnet_url,
+                                        AddTorrentKind::MagnetUrl,
+                                    ))
                                     .unwrap();
 
                                 toasts::success(&mut toasts, "Added the new torrent.");
@@ -495,12 +550,11 @@ impl eframe::App for AppState {
                                 }
 
                                 // Pause/Resume btn
-                                let state_btn_text =
-                                    if torrent.state == torrent::TorrentState::Paused {
-                                        "▶"
-                                    } else {
-                                        "⏸"
-                                    };
+                                let state_btn_text = if torrent.state == TorrentState::Paused {
+                                    "▶"
+                                } else {
+                                    "⏸"
+                                };
                                 let toggle_state_btn =
                                     ui.button(state_btn_text).on_hover_text("Pause/Resume");
                                 if toggle_state_btn.clicked() {

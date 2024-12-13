@@ -2,21 +2,21 @@ use egui::{
     Align2, Color32, FontId, Pos2, Rect, Response, Rounding, Sense, Stroke, Ui, Vec2, Widget,
 };
 
-pub struct DropWidget<'a> {
-    about_to_drop: bool,
+pub struct AddTorrentWidget<'a> {
+    has_hovering_files: bool,
     is_clicked: &'a mut bool,
 }
 
-impl<'a> DropWidget<'a> {
+impl<'a> AddTorrentWidget<'a> {
     pub fn new(about_to_drop: bool, is_clicked: &'a mut bool) -> Self {
         Self {
-            about_to_drop,
+            has_hovering_files: about_to_drop,
             is_clicked,
         }
     }
 }
 
-impl<'a> Widget for DropWidget<'a> {
+impl<'a> Widget for AddTorrentWidget<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
         // Drag and drop guide
         ui.horizontal(|ui| {
@@ -25,11 +25,8 @@ impl<'a> Widget for DropWidget<'a> {
             let drop_element = ui.allocate_rect(drop_rect, Sense::click());
             *self.is_clicked = drop_element.clicked();
 
-            //     let rect = ui.allocate_rect(drop_rect, Sense::hover());
-            // let hovering_files = ctx.input(|i| i.raw.hovered_files.clone());
-            // let pasted_content = ctx.input(|i| i.raw.);
             let color = ui.style().visuals.panel_fill;
-            let stroke = if self.about_to_drop {
+            let stroke = if self.has_hovering_files {
                 Stroke::new(2.0, Color32::LIGHT_GREEN)
             } else if drop_element.hovered() {
                 Stroke::new(2.0, Color32::WHITE.gamma_multiply(1.0))
