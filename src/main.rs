@@ -2,11 +2,9 @@
 #![allow(non_upper_case_globals)]
 
 use eframe::egui;
-use egui::{Align, Align2, CollapsingHeader, Color32, Event, Label, RichText, Sense, Ui};
+use egui::{Align, Align2, Color32, Event, Label, RichText, Sense};
 use egui::{Layout, Vec2};
-use egui_extras::{Column, TableBuilder};
-use egui_toast::{Toast, ToastKind, ToastOptions, Toasts};
-use fs_tree::{FSTree, FSTreeNode};
+use egui_toast::Toasts;
 use progress_bar::CompoundProgressBar;
 use rfd::FileDialog;
 use std::sync::mpsc::Sender;
@@ -26,6 +24,7 @@ mod fs_tree;
 mod peers;
 mod progress_bar;
 mod tests;
+mod toasts;
 mod torrent;
 mod views;
 use views::files::FilesWidget;
@@ -406,23 +405,9 @@ impl eframe::App for AppState {
                             Some(extension) => {
                                 if extension == "torrent" {
                                     // TODO: Handle torrent add from a file
-                                    toasts.add(Toast {
-                                        text: "Added new torrent".into(),
-                                        kind: ToastKind::Success,
-                                        options: ToastOptions::default()
-                                            .duration(Duration::from_secs(5))
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
+                                    toasts::success(&mut toasts, "Added the new torrent.");
                                 } else {
-                                    toasts.add(Toast {
-                                        text: "Only .torrent files are accepted.".into(),
-                                        kind: ToastKind::Error,
-                                        options: ToastOptions::default()
-                                            .duration(Duration::from_secs(5))
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
+                                    toasts::error(&mut toasts, "Only .torrent files are accepted.");
                                 }
                             }
                             None => {}
@@ -436,19 +421,11 @@ impl eframe::App for AppState {
                         match event {
                             Event::Paste(text) => {
                                 let magnet_uri = text.trim().to_string();
-
                                 self.channel_tx
                                     .send(Message::AddTorrent(magnet_uri))
                                     .unwrap();
 
-                                toasts.add(Toast {
-                                    text: "Added new torrent.".into(),
-                                    kind: ToastKind::Success,
-                                    options: ToastOptions::default()
-                                        .duration(Duration::from_secs(5))
-                                        .show_progress(true),
-                                    ..Default::default()
-                                });
+                                toasts::success(&mut toasts, "Added the new torrent.");
                             }
                             _ => {}
                         }
@@ -479,14 +456,7 @@ impl eframe::App for AppState {
                                         .unwrap();
                                     self.selection_index = None;
 
-                                    toasts.add(Toast {
-                                        text: "Removed torrent.".into(),
-                                        kind: ToastKind::Success,
-                                        options: ToastOptions::default()
-                                            .duration(Duration::from_secs(5))
-                                            .show_progress(true),
-                                        ..Default::default()
-                                    });
+                                    toasts::success(&mut toasts, "Removed the torrent.");
                                 }
 
                                 // Toggle strewam
