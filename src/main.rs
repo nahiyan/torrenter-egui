@@ -126,11 +126,11 @@ impl Default for AppState {
             last_refresh,
             can_exit: can_exit.clone(),
         };
-        let safe_to_exit_clone = can_exit.clone();
+        let can_exit_clone = can_exit.clone();
         thread::spawn(move || loop {
             let message = rx.recv().unwrap();
             message_controller.process(message);
-            if *safe_to_exit_clone.lock().unwrap() {
+            if *can_exit_clone.lock().unwrap() {
                 break;
             }
         });
