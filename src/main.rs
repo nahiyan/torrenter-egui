@@ -356,9 +356,7 @@ impl eframe::App for AppState {
 
                         match self.tab_view.selected {
                             Tab::General => {
-                                ui.vertical(|ui| {
-                                    ui.label("General");
-                                });
+                                todo!("Implement general tab")
                             }
                             Tab::Files => {
                                 ui.add(FilesWidget::new(&torrent.files));
@@ -369,10 +367,8 @@ impl eframe::App for AppState {
                                 ui.add(PeersWidget::new(&torrent.peers));
                             }
 
-                            _ => {
-                                ui.vertical(|ui| {
-                                    ui.label("Lorem ipsum.");
-                                });
+                            Tab::Trackers => {
+                                todo!("Implement trackers tab")
                             }
                         }
                     });
