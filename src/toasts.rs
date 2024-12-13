@@ -24,12 +24,6 @@ where
     add_toast(toasts, message, ToastKind::Error);
 }
 
-pub fn info<I>(toasts: &mut Toasts, message: I)
-where
-    I: Into<WidgetText>,
-{
-    add_toast(toasts, message, ToastKind::Info);
-}
 pub fn success<I>(toasts: &mut Toasts, message: I)
 where
     I: Into<WidgetText>,
