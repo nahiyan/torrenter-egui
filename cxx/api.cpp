@@ -129,14 +129,18 @@ void initiate(const char *resume_dir) {
 }
 
 const char *add_file(const char *file_path, const char *save_path) {
-  lt::add_torrent_params atp = lt::load_torrent_file(file_path);
-  atp.save_path = save_path;
-  lt::torrent_handle h = state.ses->add_torrent(atp);
-  string hash = get_hash(h);
-  Torrent *t = new Torrent(h, atp, hash);
-  state.torrents.push_back(t);
-  write_resume_file(h, atp);
-  return t->hash.c_str();
+  try {
+    lt::add_torrent_params atp = lt::load_torrent_file(file_path);
+    atp.save_path = save_path;
+    lt::torrent_handle h = state.ses->add_torrent(atp);
+    string hash = get_hash(h);
+    Torrent *t = new Torrent(h, atp, hash);
+    state.torrents.push_back(t);
+    write_resume_file(h, atp);
+    return t->hash.c_str();
+  } catch (...) {
+    return nullptr;
+  }
 }
 
 const char *add_magnet_url(const char *url, const char *save_path) {
