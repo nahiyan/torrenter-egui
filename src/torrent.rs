@@ -1,10 +1,9 @@
+use crate::models::peer;
 use std::{
     ffi::{c_int, CStr},
     fmt,
     sync::{Arc, Mutex},
 };
-
-use crate::peers;
 
 include!("../bindings.rs");
 
@@ -31,7 +30,7 @@ pub struct Torrent {
     pub is_streaming: bool,
     pub num_files: i32,
     pub files: Vec<(String, TorrentFilePriority)>,
-    pub peers: Vec<peers::Peer>,
+    pub peers: Vec<peer::Peer>,
 }
 
 impl Torrent {

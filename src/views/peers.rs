@@ -1,7 +1,7 @@
 use egui::{Response, RichText, Ui, Widget};
 use egui_extras::{Column, TableBuilder};
 
-use crate::{format_bytes, peers::Peer};
+use crate::{format_bytes, models::peer::Peer};
 
 pub struct PeersWidget<'a> {
     peers: &'a Vec<Peer>,

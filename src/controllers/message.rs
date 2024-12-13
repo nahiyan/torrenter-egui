@@ -5,8 +5,7 @@ use std::{
 };
 
 use crate::{
-    models::message::Message,
-    peers,
+    models::{message::Message, peer},
     torrent::{self, Torrent, TorrentFilePriority, TorrentState},
     AddTorrentKind,
 };
@@ -121,7 +120,7 @@ impl MessageController {
                 let num_peers_ptr = &mut num_peers;
                 let torrents = self.torrents.clone();
                 let mut torrents = torrents.lock().unwrap();
-                let peers: &mut Vec<peers::Peer> = &mut torrents[index].peers;
+                let peers: &mut Vec<peer::Peer> = &mut torrents[index].peers;
                 peers.clear();
                 unsafe {
                     let c_peers = get_peers(index as c_int, num_peers_ptr);
@@ -138,7 +137,7 @@ impl MessageController {
                         let download_rate = c_peer.download_rate;
                         let upload_rate = c_peer.upload_rate;
                         let progress = c_peer.progress;
-                        let peer = peers::Peer {
+                        let peer = peer::Peer {
                             ip_address,
                             progress,
                             client,
