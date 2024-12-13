@@ -17,7 +17,7 @@ pub struct MessageController {
     pub tx: Sender<Message>,
     pub torrents: Arc<Mutex<Vec<Torrent>>>,
     pub last_refresh: Box<Instant>,
-    pub safe_to_exit: Arc<Mutex<bool>>,
+    pub can_exit: Arc<Mutex<bool>>,
 }
 
 impl MessageController {
@@ -28,7 +28,7 @@ impl MessageController {
                 unsafe {
                     destroy();
                 };
-                *self.safe_to_exit.lock().unwrap() = true;
+                *self.can_exit.lock().unwrap() = true;
             }
             Message::Refresh | Message::ForcedRefresh => {
                 let now = Instant::now();

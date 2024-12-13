@@ -92,7 +92,7 @@ struct AppState {
     torrents: Arc<Mutex<Vec<Torrent>>>,
     selection_index: Option<usize>,
     channel_tx: Sender<Message>,
-    safe_to_exit: Arc<Mutex<bool>>,
+    can_exit: Arc<Mutex<bool>>,
     tab_view: TabView,
 }
 
@@ -115,7 +115,7 @@ impl Default for AppState {
             torrents
         }));
 
-        let safe_to_exit = Arc::new(Mutex::new(false));
+        let can_exit = Arc::new(Mutex::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<Message>();
         let last_refresh = Box::new(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
 
@@ -124,9 +124,9 @@ impl Default for AppState {
             tx: tx.clone(),
             torrents: torrents.clone(),
             last_refresh,
-            safe_to_exit: safe_to_exit.clone(),
+            can_exit: can_exit.clone(),
         };
-        let safe_to_exit_clone = safe_to_exit.clone();
+        let safe_to_exit_clone = can_exit.clone();
         thread::spawn(move || loop {
             let message = rx.recv().unwrap();
             message_controller.process(message);
@@ -139,7 +139,7 @@ impl Default for AppState {
             torrents,
             selection_index: None,
             channel_tx: tx,
-            safe_to_exit,
+            can_exit,
             tab_view: TabView {
                 tabs: [
                     (Tab::General, "General".to_owned(), false),
@@ -480,7 +480,7 @@ impl eframe::App for AppState {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.channel_tx.send(Message::Stop).unwrap();
         loop {
-            if *self.safe_to_exit.lock().unwrap() {
+            if *self.can_exit.lock().unwrap() {
                 break;
             }
         }
