@@ -307,7 +307,6 @@ impl Default for AppState {
             selection_index: None,
             channel_tx: tx,
             safe_to_exit: safe_to_exit.clone(),
-            // selected_tab: Tab::General,
             tab_view: TabView {
                 tabs: [
                     (Tab::General, "General".to_owned(), false),
