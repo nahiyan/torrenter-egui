@@ -1,7 +1,7 @@
 #[derive(Clone)]
 pub struct Peer {
     // TODO: Implement region
-    pub region: String,
+    // pub region: String,
     pub client: String,
     pub ip_address: String,
     pub progress: f32,

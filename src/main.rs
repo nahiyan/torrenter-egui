@@ -1,26 +1,30 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(non_upper_case_globals)]
 
+use controllers::message::MessageController;
 use eframe::egui;
 use egui::{Align, Align2, Color32, DroppedFile, Event, Label, RichText, Sense};
 use egui::{Layout, Vec2};
 use egui_toast::Toasts;
+use models::message::{AddTorrentKind, Message};
 use progress_bar::CompoundProgressBar;
 use rfd::FileDialog;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
     fs,
-    os::raw::c_int,
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
-use torrent::{Torrent, TorrentFilePriority, TorrentState};
+use torrent::{Torrent, TorrentState};
 use views::add_torrent::AddTorrentWidget;
+mod bytes;
+pub mod controllers;
 mod fs_tree;
+pub mod models;
 mod peers;
 mod progress_bar;
 mod tests;
@@ -30,32 +34,6 @@ mod views;
 use views::files::FilesWidget;
 use views::peers::PeersWidget;
 include!("../bindings.rs");
-
-#[macro_export]
-macro_rules! format_bytes {
-    ($bytes: expr, $prefix: literal) => {{
-        let tb = i64::pow(10, 12);
-        let gb = i64::pow(10, 9);
-        let mb = i64::pow(10, 6);
-        let kb = i64::pow(10, 3);
-
-        if $bytes >= tb {
-            format!("{:.2} TB{}", $bytes as f32 / tb as f32, $prefix)
-        } else if $bytes >= gb {
-            format!("{:.2} GB{}", $bytes as f32 / gb as f32, $prefix)
-        } else if $bytes >= mb {
-            format!("{:.2} MB{}", $bytes as f32 / mb as f32, $prefix)
-        } else if $bytes >= kb {
-            format!("{:.2} KB{}", $bytes as f32 / kb as f32, $prefix)
-        } else {
-            format!("{:.2} B{}", $bytes as f32 / mb as f32, $prefix)
-        }
-    }};
-
-    ($bytes: expr) => {
-        format_bytes!($bytes, "")
-    };
-}
 
 fn prepare_data_dir() -> PathBuf {
     let data_dir_base = dirs::data_dir().expect("Failed to get the data dir.");
@@ -111,31 +89,11 @@ struct TabView {
 }
 
 struct AppState {
-    magnet_url: String,
     torrents: Arc<Mutex<Vec<Torrent>>>,
     selection_index: Option<usize>,
     channel_tx: Sender<Message>,
     safe_to_exit: Arc<Mutex<bool>>,
     tab_view: TabView,
-}
-
-#[derive(PartialEq)]
-enum AddTorrentKind {
-    File,
-    MagnetUrl,
-}
-
-#[derive(PartialEq)]
-enum Message {
-    Stop,
-    Refresh,
-    ForcedRefresh,
-    AddTorrent(String, AddTorrentKind),
-    RemoveTorrent(usize),
-    UpdateState(TorrentState, usize),
-    ToggleStream(usize),
-    ChangeFilePriority(usize, usize, TorrentFilePriority),
-    FetchPeers(usize),
 }
 
 impl Default for AppState {
@@ -159,154 +117,29 @@ impl Default for AppState {
 
         let safe_to_exit = Arc::new(Mutex::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<Message>();
-        let mut last_refresh = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
-        let tx_clone = tx.clone();
+        let last_refresh = Box::new(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
 
         // Perform torrent-related tasks in the background
-        let torrents_clone = torrents.clone();
+        let mut message_controller = MessageController {
+            tx: tx.clone(),
+            torrents: torrents.clone(),
+            last_refresh,
+            safe_to_exit: safe_to_exit.clone(),
+        };
         let safe_to_exit_clone = safe_to_exit.clone();
         thread::spawn(move || loop {
             let message = rx.recv().unwrap();
-            match message {
-                Message::Stop => {
-                    println!("Stopping.");
-                    unsafe {
-                        destroy();
-                    };
-                    *safe_to_exit_clone.lock().unwrap() = true;
-
-                    break;
-                }
-                Message::Refresh | Message::ForcedRefresh => {
-                    let now = Instant::now();
-                    let elapsed = now.duration_since(last_refresh).as_secs_f32();
-
-                    if elapsed >= 0.9 || message == Message::ForcedRefresh {
-                        unsafe { handle_alerts() }
-                        torrent::refresh(torrents_clone.clone());
-                        last_refresh = now;
-                    }
-                }
-                Message::AddTorrent(path, kind) => {
-                    let downloads_dir = dirs::download_dir()
-                        .expect("Failed to get downloads dir.")
-                        .to_str()
-                        .expect("Failed to convert to string")
-                        .to_owned();
-                    let downloads_dir_cstr =
-                        CString::new(downloads_dir.clone()).expect("Failed to create CString");
-                    let mut torrent = Torrent::new("".to_owned(), downloads_dir);
-                    let path_cstr = CString::new(path).expect("Failed to create CString");
-
-                    match kind {
-                        AddTorrentKind::MagnetUrl => {
-                            let magnet_url_cstr = path_cstr;
-                            // TODO: Handle errors
-                            torrent.hash = unsafe {
-                                let hash_cstr = add_magnet_url(
-                                    magnet_url_cstr.as_ptr(),
-                                    downloads_dir_cstr.as_ptr(),
-                                );
-                                CStr::from_ptr(hash_cstr)
-                                    .to_str()
-                                    .expect("Failed to work with cstr")
-                                    .to_string()
-                            };
-                        }
-                        AddTorrentKind::File => {
-                            let file_path_cstr = path_cstr;
-                            // TODO: Handle errors
-                            torrent.hash = unsafe {
-                                let hash_cstr =
-                                    add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
-                                CStr::from_ptr(hash_cstr)
-                                    .to_str()
-                                    .expect("Failed to work with cstr")
-                                    .to_string()
-                            };
-                        }
-                    }
-                    tx_clone.send(Message::ForcedRefresh).unwrap();
-                }
-                Message::UpdateState(state, index) => {
-                    if state == TorrentState::Paused {
-                        unsafe {
-                            torrent_resume(index as c_int);
-                        }
-                    } else {
-                        unsafe {
-                            torrent_pause(index as c_int);
-                        }
-                    }
-                    tx_clone.send(Message::ForcedRefresh).unwrap();
-                }
-                Message::RemoveTorrent(index) => unsafe {
-                    torrent_remove(index as c_int);
-                    tx_clone.send(Message::ForcedRefresh).unwrap();
-                },
-                Message::ToggleStream(index) => unsafe {
-                    toggle_stream(index as c_int);
-                    tx_clone.send(Message::ForcedRefresh).unwrap();
-                },
-                Message::ChangeFilePriority(index, f_index, priority) => unsafe {
-                    let lt_download_priority = match priority {
-                        TorrentFilePriority::Skip => 0,
-                        TorrentFilePriority::Low => 1,
-                        TorrentFilePriority::Default => 4,
-                        TorrentFilePriority::High => 7,
-                    };
-                    change_file_priority(
-                        index as c_int,
-                        f_index as c_int,
-                        lt_download_priority as c_int,
-                    );
-                    tx_clone.send(Message::ForcedRefresh).unwrap();
-                },
-                Message::FetchPeers(index) => {
-                    let mut num_peers: c_int = 0;
-                    let num_peers_ptr = &mut num_peers;
-                    let torrents = torrents_clone.clone();
-                    let mut torrents = torrents.lock().unwrap();
-                    let peers: &mut Vec<peers::Peer> = &mut torrents[index].peers;
-                    peers.clear();
-                    unsafe {
-                        let c_peers = get_peers(index as c_int, num_peers_ptr);
-                        for i in 0..num_peers {
-                            let c_peer = *c_peers.add(i as usize);
-                            let ip_address = CStr::from_ptr(c_peer.ip_address)
-                                .to_str()
-                                .expect("Failed to process C str")
-                                .to_string();
-                            let client = CStr::from_ptr(c_peer.client)
-                                .to_str()
-                                .expect("Failed to process C str")
-                                .to_string();
-                            let download_rate = c_peer.download_rate;
-                            let upload_rate = c_peer.upload_rate;
-                            let progress = c_peer.progress;
-                            let region = "Test".to_owned();
-                            let peer = peers::Peer {
-                                ip_address,
-                                progress,
-                                client,
-                                download_rate,
-                                upload_rate,
-                                region,
-                            };
-                            peers.push(peer);
-                        }
-                        free_peers(c_peers, num_peers);
-                    }
-                }
+            message_controller.process(message);
+            if *safe_to_exit_clone.lock().unwrap() {
+                break;
             }
         });
 
         Self {
-            magnet_url: "".to_owned(),
             torrents,
             selection_index: None,
             channel_tx: tx,
-            safe_to_exit: safe_to_exit.clone(),
+            safe_to_exit,
             tab_view: TabView {
                 tabs: [
                     (Tab::General, "General".to_owned(), false),

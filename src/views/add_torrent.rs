@@ -1,6 +1,4 @@
-use egui::{
-    Align2, Color32, FontId, Pos2, Rect, Response, Rounding, Sense, Stroke, Ui, Vec2, Widget,
-};
+use egui::{Color32, Label, Pos2, Rect, Response, Rounding, Sense, Stroke, Ui, Vec2, Widget};
 
 pub struct AddTorrentWidget<'a> {
     has_hovering_files: bool,
@@ -35,15 +33,24 @@ impl<'a> Widget for AddTorrentWidget<'a> {
             };
             ui.painter()
                 .rect(drop_rect, Rounding::from(2.5), color, stroke);
-            ui.painter().text(
-                drop_rect.center(),
-                Align2::CENTER_CENTER,
-                "(1) Paste a magnet URL. \
-                (2) Drag and drop a torrent file here. \
-                (3) Click to select a file manually.",
-                FontId::default(),
-                ui.style().visuals.text_color(),
-            );
+
+            // ui.painter().text(
+            //     drop_rect.center(),
+            //     Align2::CENTER_CENTER,
+            //     "(1) Paste a magnet URL. \
+            //     (2) Drag and drop a torrent file here. \
+            //     (3) Click to select a file manually.",
+            //     FontId::default(),
+            //     ui.style().visuals.text_color(),
+            // );
+            let text = Label::new(
+                "Paste a magnet URL ⚪ \
+                Drag and drop a torrent file ⚪ \
+                Click to select a file manually",
+            )
+            .sense(Sense::focusable_noninteractive())
+            .selectable(false);
+            ui.put(drop_rect, text);
         });
         ui.response()
     }
