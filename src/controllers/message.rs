@@ -5,10 +5,15 @@ use std::{
 };
 
 use crate::{
-    models::{message::Message, peer},
-    torrent::{self, Torrent, TorrentFilePriority, TorrentState},
+    models::{
+        message::Message,
+        peer,
+        torrent::{Torrent, TorrentFilePriority, TorrentState},
+    },
     AddTorrentKind,
 };
+
+use super::torrent::TorrentController;
 
 include!("../../bindings.rs");
 
@@ -17,6 +22,7 @@ pub struct MessageController {
     pub torrents: Arc<Mutex<Vec<Torrent>>>,
     pub last_refresh: Box<Instant>,
     pub can_exit: Arc<Mutex<bool>>,
+    pub torrent_controller: TorrentController,
 }
 
 impl MessageController {
@@ -35,7 +41,7 @@ impl MessageController {
 
                 if elapsed >= 0.9 || message == Message::ForcedRefresh {
                     unsafe { handle_alerts() }
-                    torrent::refresh(self.torrents.clone());
+                    self.torrent_controller.refresh();
                     self.last_refresh = Box::new(now);
                 }
             }

@@ -2,11 +2,13 @@
 #![allow(non_upper_case_globals)]
 
 use controllers::message::MessageController;
+use controllers::torrent::TorrentController;
 use eframe::egui;
 use egui::{Align, Align2, Color32, DroppedFile, Event, Label, RichText, Sense};
 use egui::{Layout, Vec2};
 use egui_toast::Toasts;
 use models::message::{AddTorrentKind, Message};
+use models::torrent::{Torrent, TorrentState};
 use rfd::FileDialog;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
@@ -18,7 +20,6 @@ use std::{
     thread,
     time::Duration,
 };
-use torrent::{Torrent, TorrentState};
 use views::add_torrent::AddTorrentWidget;
 use views::progress_bar::CompoundProgressBar;
 mod bytes;
@@ -27,7 +28,6 @@ mod fs_tree;
 pub mod models;
 mod tests;
 mod toasts;
-mod torrent;
 mod views;
 use views::files::FilesWidget;
 use views::peers::PeersWidget;
@@ -123,6 +123,9 @@ impl Default for AppState {
             torrents: torrents.clone(),
             last_refresh,
             can_exit: can_exit.clone(),
+            torrent_controller: TorrentController {
+                torrents: torrents.clone(),
+            },
         };
         let can_exit_clone = can_exit.clone();
         thread::spawn(move || loop {

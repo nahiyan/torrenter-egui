@@ -2,7 +2,7 @@ use egui::{CollapsingHeader, Response, Ui, Widget};
 
 use crate::{
     fs_tree::{FSTree, FSTreeNode},
-    torrent::TorrentFilePriority,
+    models::torrent::TorrentFilePriority,
 };
 
 pub struct FilesWidget<'a> {

@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Rect, Rounding, Vec2, Widget};
 
-use crate::torrent::{Torrent, TorrentPieceState};
+use crate::models::torrent::{Torrent, TorrentPieceState};
 
 pub struct CompoundProgressBar<'a> {
     torrent: &'a Torrent,
@@ -29,11 +29,11 @@ impl Widget for CompoundProgressBar<'_> {
             let mut groups: Vec<(u32, u32, u32)> = (0..groups_count).map(|_| (0, 0, 0)).collect();
             for (i, piece) in self.torrent.pieces.iter().enumerate() {
                 let group_index = (i as f32 / group_size as f32).floor() as usize;
-                let group = &mut groups[group_index];
-                let c = match piece {
-                    &TorrentPieceState::Complete => &mut group.0,
-                    &TorrentPieceState::Queued => &mut group.1,
-                    &TorrentPieceState::Incomplete => &mut group.2,
+                let (c_pieces, q_pieces, i_pieces) = &mut groups[group_index];
+                let c = match *piece {
+                    TorrentPieceState::Complete => c_pieces,
+                    TorrentPieceState::Queued => q_pieces,
+                    TorrentPieceState::Incomplete => i_pieces,
                 };
                 *c += 1;
             }

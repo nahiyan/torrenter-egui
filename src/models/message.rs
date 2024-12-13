@@ -1,4 +1,4 @@
-use crate::torrent::{TorrentFilePriority, TorrentState};
+use super::torrent::{TorrentFilePriority, TorrentState};
 
 #[derive(PartialEq)]
 pub enum AddTorrentKind {
