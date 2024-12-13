@@ -8,6 +8,7 @@ use egui::{Align, Align2, Color32, DroppedFile, Event, Label, RichText, Sense};
 use egui::{Layout, Vec2};
 use egui_toast::Toasts;
 use models::message::{AddTorrentKind, Message};
+use models::tab::{Tab, TabView};
 use models::torrent::{Torrent, TorrentState};
 use rfd::FileDialog;
 use std::sync::mpsc::Sender;
@@ -22,6 +23,7 @@ use std::{
 };
 use views::add_torrent::AddTorrentWidget;
 use views::progress_bar::CompoundProgressBar;
+use views::torrent::TorrentWidget;
 mod bytes;
 pub mod controllers;
 mod fs_tree;
@@ -73,19 +75,6 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(PartialEq, Clone)]
-enum Tab {
-    General,
-    Files,
-    Peers,
-    Trackers,
-}
-
-struct TabView {
-    tabs: [(Tab, String, bool); 4],
-    selected: Tab,
-}
-
 struct AppState {
     torrents: Arc<Mutex<Vec<Torrent>>>,
     sel_torrent: Option<usize>,
@@ -118,7 +107,7 @@ impl Default for AppState {
         let last_refresh = Box::new(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
 
         // Perform torrent-related tasks in the background
-        let mut message_controller = MessageController {
+        let mut msg_controller = MessageController {
             tx: tx.clone(),
             torrents: torrents.clone(),
             last_refresh,
@@ -130,7 +119,7 @@ impl Default for AppState {
         let can_exit_clone = can_exit.clone();
         thread::spawn(move || loop {
             let message = rx.recv().unwrap();
-            message_controller.process(message);
+            msg_controller.process(message);
             if *can_exit_clone.lock().unwrap() {
                 break;
             }
@@ -320,155 +309,156 @@ impl eframe::App for AppState {
                     ui.heading("Torrents");
                     ui.add_space(5.0);
                     for (index, torrent) in torrents.iter().enumerate() {
-                        let torrent_title = {
-                            let name = if torrent.name == "".to_string() {
-                                &torrent.hash
-                            } else {
-                                &torrent.name
-                            };
-                            let rich_text = RichText::new(name).size(14.0).strong();
-                            Label::new(rich_text).truncate().halign(egui::Align::LEFT)
-                        };
-                        ui.vertical(|ui| {
-                            // Title and controls
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                                // Remove torrent
-                                let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
-                                if remove_btn.clicked() {
-                                    self.channel_tx
-                                        .send(Message::RemoveTorrent(index.clone()))
-                                        .unwrap();
-                                    self.sel_torrent = None;
+                        ui.add(TorrentWidget { torrent });
+                        // let torrent_title = {
+                        //     let name = if torrent.name == "".to_string() {
+                        //         &torrent.hash
+                        //     } else {
+                        //         &torrent.name
+                        //     };
+                        //     let rich_text = RichText::new(name).size(14.0).strong();
+                        //     Label::new(rich_text).truncate().halign(egui::Align::LEFT)
+                        // };
+                        // ui.vertical(|ui| {
+                        //     // Title and controls
+                        //     ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                        //         // Remove torrent
+                        //         let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
+                        //         if remove_btn.clicked() {
+                        //             self.channel_tx
+                        //                 .send(Message::RemoveTorrent(index.clone()))
+                        //                 .unwrap();
+                        //             self.sel_torrent = None;
 
-                                    toasts::success(&mut toasts, "Removed the torrent.");
-                                }
+                        //             toasts::success(&mut toasts, "Removed the torrent.");
+                        //         }
 
-                                // Toggle strewam
-                                let stream_btn = ui
-                                    .button(if torrent.is_streaming {
-                                        RichText::new("📶").strong()
-                                    } else {
-                                        RichText::new("📶")
-                                    })
-                                    .on_hover_text("Stream");
-                                if stream_btn.clicked() {
-                                    self.channel_tx
-                                        .send(Message::ToggleStream(index.clone()))
-                                        .unwrap();
-                                }
+                        //         // Toggle strewam
+                        //         let stream_btn = ui
+                        //             .button(if torrent.is_streaming {
+                        //                 RichText::new("📶").strong()
+                        //             } else {
+                        //                 RichText::new("📶")
+                        //             })
+                        //             .on_hover_text("Stream");
+                        //         if stream_btn.clicked() {
+                        //             self.channel_tx
+                        //                 .send(Message::ToggleStream(index.clone()))
+                        //                 .unwrap();
+                        //         }
 
-                                // Open directory
-                                if ui
-                                    .button("📂")
-                                    .on_hover_text("Open containing directory")
-                                    .clicked()
-                                {
-                                    open::that(torrent.save_path.clone()).unwrap();
-                                }
+                        //         // Open directory
+                        //         if ui
+                        //             .button("📂")
+                        //             .on_hover_text("Open containing directory")
+                        //             .clicked()
+                        //         {
+                        //             open::that(torrent.save_path.clone()).unwrap();
+                        //         }
 
-                                // Info button
-                                let info_btn = ui.button("ℹ").on_hover_text("Details");
-                                let is_selected = Some(index + 1) == self.sel_torrent;
+                        //         // Info button
+                        //         let info_btn = ui.button("ℹ").on_hover_text("Details");
+                        //         let is_selected = Some(index + 1) == self.sel_torrent;
 
-                                if is_selected {
-                                    info_btn.clone().highlight();
-                                }
-                                if info_btn.clicked() {
-                                    self.sel_torrent = if !is_selected {
-                                        self.channel_tx.send(Message::ForcedRefresh).unwrap();
-                                        Some(index + 1)
-                                    } else {
-                                        None
-                                    };
-                                }
+                        //         if is_selected {
+                        //             info_btn.clone().highlight();
+                        //         }
+                        //         if info_btn.clicked() {
+                        //             self.sel_torrent = if !is_selected {
+                        //                 self.channel_tx.send(Message::ForcedRefresh).unwrap();
+                        //                 Some(index + 1)
+                        //             } else {
+                        //                 None
+                        //             };
+                        //         }
 
-                                // Pause/Resume btn
-                                let state_btn_text = if torrent.state == TorrentState::Paused {
-                                    "▶"
-                                } else {
-                                    "⏸"
-                                };
-                                let toggle_state_btn =
-                                    ui.button(state_btn_text).on_hover_text("Pause/Resume");
-                                if toggle_state_btn.clicked() {
-                                    self.channel_tx
-                                        .send(Message::UpdateState(
-                                            torrent.state.clone(),
-                                            index.clone(),
-                                        ))
-                                        .unwrap();
-                                }
+                        //         // Pause/Resume btn
+                        //         let state_btn_text = if torrent.state == TorrentState::Paused {
+                        //             "▶"
+                        //         } else {
+                        //             "⏸"
+                        //         };
+                        //         let toggle_state_btn =
+                        //             ui.button(state_btn_text).on_hover_text("Pause/Resume");
+                        //         if toggle_state_btn.clicked() {
+                        //             self.channel_tx
+                        //                 .send(Message::UpdateState(
+                        //                     torrent.state.clone(),
+                        //                     index.clone(),
+                        //                 ))
+                        //                 .unwrap();
+                        //         }
 
-                                ui.with_layout(
-                                    egui::Layout::left_to_right(egui::Align::TOP),
-                                    |ui| {
-                                        ui.add(torrent_title);
-                                    },
-                                )
-                            });
+                        //         ui.with_layout(
+                        //             egui::Layout::left_to_right(egui::Align::TOP),
+                        //             |ui| {
+                        //                 ui.add(torrent_title);
+                        //             },
+                        //         )
+                        //     });
 
-                            // Status
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 0.0;
+                        //     // Status
+                        //     ui.horizontal(|ui| {
+                        //         ui.spacing_mut().item_spacing.x = 0.0;
 
-                                // Color
-                                let state_color = match torrent.state {
-                                    TorrentState::Seeding => {
-                                        Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
-                                    }
-                                    TorrentState::Downloading => {
-                                        Color32::GREEN.lerp_to_gamma(Color32::WHITE, 0.5)
-                                    }
-                                    TorrentState::Paused => {
-                                        Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.3)
-                                    }
-                                    TorrentState::QueuedForChecking
-                                    | TorrentState::CheckingFiles
-                                    | TorrentState::DownloadingMetaData
-                                    | TorrentState::Allocating
-                                    | TorrentState::CheckingResumeData => {
-                                        Color32::RED.lerp_to_gamma(Color32::WHITE, 0.5)
-                                    }
-                                    _ => ui.visuals().text_color(),
-                                };
+                        //         // Color
+                        //         let state_color = match torrent.state {
+                        //             TorrentState::Seeding => {
+                        //                 Color32::BLUE.lerp_to_gamma(Color32::WHITE, 0.6)
+                        //             }
+                        //             TorrentState::Downloading => {
+                        //                 Color32::GREEN.lerp_to_gamma(Color32::WHITE, 0.5)
+                        //             }
+                        //             TorrentState::Paused => {
+                        //                 Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.3)
+                        //             }
+                        //             TorrentState::QueuedForChecking
+                        //             | TorrentState::CheckingFiles
+                        //             | TorrentState::DownloadingMetaData
+                        //             | TorrentState::Allocating
+                        //             | TorrentState::CheckingResumeData => {
+                        //                 Color32::RED.lerp_to_gamma(Color32::WHITE, 0.5)
+                        //             }
+                        //             _ => ui.visuals().text_color(),
+                        //         };
 
-                                // Emoji
-                                let state_emoji = match torrent.state {
-                                    TorrentState::Finished => "✅",
-                                    TorrentState::Seeding => "🍒",
-                                    TorrentState::Downloading => "📩",
-                                    TorrentState::Paused => "⏸",
-                                    _ => "⭕",
-                                };
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{} {}",
-                                        state_emoji,
-                                        torrent.state.to_string()
-                                    ))
-                                    .color(state_color),
-                                );
+                        //         // Emoji
+                        //         let state_emoji = match torrent.state {
+                        //             TorrentState::Finished => "✅",
+                        //             TorrentState::Seeding => "🍒",
+                        //             TorrentState::Downloading => "📩",
+                        //             TorrentState::Paused => "⏸",
+                        //             _ => "⭕",
+                        //         };
+                        //         ui.label(
+                        //             RichText::new(format!(
+                        //                 "{} {}",
+                        //                 state_emoji,
+                        //                 torrent.state.to_string()
+                        //             ))
+                        //             .color(state_color),
+                        //         );
 
-                                // Label
-                                ui.label(format!(
-                                    " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
-                                    format_bytes!(torrent.total_size),
-                                    format_bytes!(torrent.download_rate, "/s"),
-                                    format_bytes!(torrent.upload_rate, "/s"),
-                                    torrent.num_seeds,
-                                    torrent.num_seeds
-                                ));
-                            });
+                        //         // Label
+                        //         ui.label(format!(
+                        //             " • {} • ⬇ {} • ⬆ {} • {} seeds • {} peers",
+                        //             format_bytes!(torrent.total_size),
+                        //             format_bytes!(torrent.download_rate, "/s"),
+                        //             format_bytes!(torrent.upload_rate, "/s"),
+                        //             torrent.num_seeds,
+                        //             torrent.num_seeds
+                        //         ));
+                        //     });
 
-                            // Compound progress bar
-                            if torrent.state == TorrentState::DownloadingMetaData
-                                || torrent.state == TorrentState::Allocating
-                            {
-                            } else {
-                                ui.add(CompoundProgressBar::new(torrent));
-                            }
-                            ui.add_space(15.0);
-                        });
+                        //     // Compound progress bar
+                        //     if torrent.state == TorrentState::DownloadingMetaData
+                        //         || torrent.state == TorrentState::Allocating
+                        //     {
+                        //     } else {
+                        //         ui.add(CompoundProgressBar::new(torrent));
+                        //     }
+                        //     ui.add_space(15.0);
+                        // });
                     }
                 }
             });
