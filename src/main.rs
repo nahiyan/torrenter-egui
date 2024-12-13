@@ -90,7 +90,7 @@ struct TabView {
 
 struct AppState {
     torrents: Arc<Mutex<Vec<Torrent>>>,
-    selection_index: Option<usize>,
+    sel_torrent: Option<usize>,
     channel_tx: Sender<Message>,
     can_exit: Arc<Mutex<bool>>,
     tab_view: TabView,
@@ -137,7 +137,7 @@ impl Default for AppState {
 
         Self {
             torrents,
-            selection_index: None,
+            sel_torrent: None,
             channel_tx: tx,
             can_exit,
             tab_view: TabView {
@@ -159,7 +159,7 @@ impl eframe::App for AppState {
         let torrents = self.torrents.lock().unwrap();
 
         // Bottom panel
-        if let Some(index) = self.selection_index {
+        if let Some(index) = self.sel_torrent {
             let index = index - 1;
             let torrent = &torrents[index];
             egui::TopBottomPanel::bottom("torrent_info")
@@ -172,7 +172,7 @@ impl eframe::App for AppState {
                         ui.with_layout(Layout::right_to_left(Align::RIGHT), |ui| {
                             // Close button
                             if ui.button("✖").clicked() {
-                                self.selection_index = None;
+                                self.sel_torrent = None;
                             }
 
                             // Tabs
@@ -337,7 +337,7 @@ impl eframe::App for AppState {
                                     self.channel_tx
                                         .send(Message::RemoveTorrent(index.clone()))
                                         .unwrap();
-                                    self.selection_index = None;
+                                    self.sel_torrent = None;
 
                                     toasts::success(&mut toasts, "Removed the torrent.");
                                 }
@@ -367,13 +367,13 @@ impl eframe::App for AppState {
 
                                 // Info button
                                 let info_btn = ui.button("ℹ").on_hover_text("Details");
-                                let is_selected = Some(index + 1) == self.selection_index;
+                                let is_selected = Some(index + 1) == self.sel_torrent;
 
                                 if is_selected {
                                     info_btn.clone().highlight();
                                 }
                                 if info_btn.clicked() {
-                                    self.selection_index = if !is_selected {
+                                    self.sel_torrent = if !is_selected {
                                         self.channel_tx.send(Message::ForcedRefresh).unwrap();
                                         Some(index + 1)
                                     } else {
