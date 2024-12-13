@@ -1,15 +1,15 @@
 use egui::{Response, RichText, Ui, Widget};
 use egui_extras::{Column, TableBuilder};
 
-use crate::{format_bytes, torrent::Torrent};
+use crate::{format_bytes, peers::Peer};
 
 pub struct PeersWidget<'a> {
-    torrent: &'a Torrent,
+    peers: &'a Vec<Peer>,
 }
 
 impl<'a> PeersWidget<'a> {
-    pub fn new(torrent: &'a Torrent) -> Self {
-        Self { torrent }
+    pub fn new(peers: &'a Vec<Peer>) -> Self {
+        Self { peers }
     }
 }
 
@@ -42,7 +42,7 @@ impl<'a> Widget for PeersWidget<'a> {
                 });
             })
             .body(|mut body| {
-                self.torrent.peers.iter().for_each(|p| {
+                self.peers.iter().for_each(|p| {
                     body.row(30.0, |mut row| {
                         row.col(|ui| {
                             ui.label(p.ip_address.clone());

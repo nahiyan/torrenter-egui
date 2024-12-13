@@ -366,7 +366,7 @@ impl eframe::App for AppState {
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();
 
-                                ui.add(PeersWidget::new(torrent));
+                                ui.add(PeersWidget::new(&torrent.peers));
                             }
 
                             _ => {
