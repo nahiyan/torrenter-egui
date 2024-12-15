@@ -15,7 +15,7 @@ pub enum Message {
     RemoveTorrent(usize),
     UpdateState(TorrentState, usize),
     UpdateSelTorrent(Option<usize>),
-    ToggleStream(usize),
+    ToggleStreamMode(usize),
     ChangeFilePriority(usize, usize, TorrentFilePriority),
     FetchPeers(usize),
     OpenDir(String),

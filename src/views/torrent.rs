@@ -51,7 +51,7 @@ impl<'a> Widget for TorrentWidget<'a> {
                     .on_hover_text("Stream");
                 if stream_btn.clicked() {
                     self.channel_tx
-                        .send(Message::ToggleStream(self.index.clone()))
+                        .send(Message::ToggleStreamMode(self.index.clone()))
                         .unwrap();
                 }
 

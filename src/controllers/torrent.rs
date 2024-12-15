@@ -1,20 +1,15 @@
 use crate::models::{
-    message::Message,
+    message::{AddTorrentKind, Message},
+    peer,
     torrent::{Torrent, TorrentFilePriority, TorrentPieceState, TorrentState},
 };
 use std::{
     cell::Cell,
-    ffi::{c_int, CStr},
+    ffi::{c_int, CStr, CString},
     sync::{mpsc::Sender, Arc, Mutex},
 };
 
 include!("../../bindings.rs");
-
-pub struct TorrentController {
-    pub torrents: Arc<Mutex<Vec<Torrent>>>,
-    pub channel_tx: Sender<Message>,
-    pub sel_torrent: Arc<Cell<Option<usize>>>,
-}
 
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     let torrents_count = unsafe { get_count() as usize };
@@ -104,38 +99,101 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     }
 }
 
-impl TorrentController {
-    pub fn remove(&self, index: &usize) {
-        self.channel_tx
-            .send(Message::RemoveTorrent(index.clone()))
-            .unwrap();
-        self.sel_torrent.set(None);
+pub fn add_torrent(path: String, kind: AddTorrentKind) {
+    let downloads_dir = dirs::download_dir()
+        .expect("Failed to get downloads dir.")
+        .to_str()
+        .expect("Failed to convert to string")
+        .to_owned();
+    let downloads_dir_cstr = CString::new(downloads_dir.clone()).expect("Failed to create CString");
+    let path_cstr = CString::new(path).expect("Failed to create CString");
 
-        // toasts::success(&mut toasts, "Removed the torrent.");
+    match kind {
+        AddTorrentKind::MagnetUrl => {
+            let magnet_url_cstr = path_cstr;
+            // TODO: Handle errors
+            unsafe {
+                let hash_cstr =
+                    add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
+                CStr::from_ptr(hash_cstr)
+                    .to_str()
+                    .expect("Failed to work with cstr")
+                    .to_string()
+            };
+        }
+        AddTorrentKind::File => {
+            let file_path_cstr = path_cstr;
+            // TODO: Handle errors
+            unsafe {
+                let hash_cstr = add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
+                // hash_cstr.as_ref().is_none();
+                CStr::from_ptr(hash_cstr)
+                    .to_str()
+                    .expect("Failed to work with cstr")
+                    .to_string()
+            };
+        }
     }
+}
 
-    pub fn toggle_stream(&self, index: &usize) {
-        self.channel_tx
-            .send(Message::ToggleStream(index.clone()))
-            .unwrap();
+pub fn remove(index: usize) {
+    unsafe {
+        torrent_remove(index as c_int);
     }
+}
 
-    pub fn open_dir(&self, torrent: &Torrent) {
-        open::that(torrent.save_path.clone()).unwrap();
+pub fn toggle_stream_mode(index: usize) {
+    unsafe {
+        toggle_stream(index as c_int);
     }
+}
 
-    pub fn show_info(&self, index: &usize, is_selected: bool) {
-        self.sel_torrent.set(if !is_selected {
-            Some(index.clone() + 1)
-        } else {
-            None
-        });
-        self.channel_tx.send(Message::ForcedRefresh).unwrap();
+pub fn set_file_priority(index: usize, f_index: usize, priority: TorrentFilePriority) {
+    let lt_download_priority = match priority {
+        TorrentFilePriority::Skip => 0,
+        TorrentFilePriority::Low => 1,
+        TorrentFilePriority::Default => 4,
+        TorrentFilePriority::High => 7,
+    };
+    unsafe {
+        change_file_priority(
+            index as c_int,
+            f_index as c_int,
+            lt_download_priority as c_int,
+        );
     }
+}
 
-    pub fn set_state(&self, index: &usize, state: TorrentState) {
-        self.channel_tx
-            .send(Message::UpdateState(state, index.clone()))
-            .unwrap();
+pub fn fetch_peers(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
+    let mut num_peers: c_int = 0;
+    let num_peers_ptr = &mut num_peers;
+    let mut torrents = torrents.lock().unwrap();
+    let peers: &mut Vec<peer::Peer> = &mut torrents[index].peers;
+    peers.clear();
+    unsafe {
+        let c_peers = get_peers(index as c_int, num_peers_ptr);
+        for i in 0..num_peers {
+            let c_peer = *c_peers.add(i as usize);
+            let ip_address = CStr::from_ptr(c_peer.ip_address)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string();
+            let client = CStr::from_ptr(c_peer.client)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string();
+            let download_rate = c_peer.download_rate;
+            let upload_rate = c_peer.upload_rate;
+            let progress = c_peer.progress;
+            let peer = peer::Peer {
+                ip_address,
+                progress,
+                client,
+                download_rate,
+                upload_rate,
+            };
+            peers.push(peer);
+        }
+        free_peers(c_peers, num_peers);
     }
 }
