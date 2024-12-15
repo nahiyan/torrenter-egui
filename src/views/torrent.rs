@@ -1,14 +1,22 @@
+use std::sync::mpsc::Sender;
+
 use egui::{Color32, Label, RichText, Widget};
 
 use crate::{
     format_bytes,
-    models::torrent::{Torrent, TorrentState},
+    models::{
+        message::Message,
+        torrent::{Torrent, TorrentState},
+    },
 };
 
 use super::progress_bar::CompoundProgressBar;
 
 pub struct TorrentWidget<'a> {
     pub torrent: &'a Torrent,
+    pub sel_torrent: Option<usize>,
+    pub index: usize,
+    pub channel_tx: &'a Sender<Message>,
 }
 
 impl<'a> Widget for TorrentWidget<'a> {
@@ -27,14 +35,11 @@ impl<'a> Widget for TorrentWidget<'a> {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 // Remove torrent
                 let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
-                // if remove_btn.clicked() {
-                //     self.channel_tx
-                //         .send(Message::RemoveTorrent(index.clone()))
-                //         .unwrap();
-                //     self.sel_torrent = None;
-
-                //     toasts::success(&mut toasts, "Removed the torrent.");
-                // }
+                if remove_btn.clicked() {
+                    self.channel_tx
+                        .send(Message::RemoveTorrent(self.index.clone()))
+                        .unwrap();
+                }
 
                 // Toggle strewam
                 let stream_btn = ui
@@ -44,11 +49,11 @@ impl<'a> Widget for TorrentWidget<'a> {
                         RichText::new("📶")
                     })
                     .on_hover_text("Stream");
-                // if stream_btn.clicked() {
-                //     self.channel_tx
-                //         .send(Message::ToggleStream(index.clone()))
-                //         .unwrap();
-                // }
+                if stream_btn.clicked() {
+                    self.channel_tx
+                        .send(Message::ToggleStream(self.index.clone()))
+                        .unwrap();
+                }
 
                 // Open directory
                 if ui
@@ -56,24 +61,27 @@ impl<'a> Widget for TorrentWidget<'a> {
                     .on_hover_text("Open containing directory")
                     .clicked()
                 {
-                    // open::that(torrent.save_path.clone()).unwrap();
+                    self.channel_tx
+                        .send(Message::OpenDir(self.torrent.save_path.clone()))
+                        .unwrap();
                 }
 
                 // Info button
                 let info_btn = ui.button("ℹ").on_hover_text("Details");
-                // let is_selected = Some(index + 1) == self.sel_torrent;
-
-                // if is_selected {
-                //     info_btn.clone().highlight();
-                // }
-                // if info_btn.clicked() {
-                //     self.sel_torrent = if !is_selected {
-                //         self.channel_tx.send(Message::ForcedRefresh).unwrap();
-                //         Some(index + 1)
-                //     } else {
-                //         None
-                //     };
-                // }
+                let is_selected = Some(self.index + 1) == self.sel_torrent;
+                if is_selected {
+                    info_btn.clone().highlight();
+                }
+                if info_btn.clicked() {
+                    let new_sel = if is_selected {
+                        None
+                    } else {
+                        Some(self.index + 1)
+                    };
+                    self.channel_tx
+                        .send(Message::UpdateSelTorrent(new_sel))
+                        .unwrap();
+                }
 
                 // Pause/Resume btn
                 let state_btn_text = if self.torrent.state == TorrentState::Paused {
@@ -82,11 +90,14 @@ impl<'a> Widget for TorrentWidget<'a> {
                     "⏸"
                 };
                 let toggle_state_btn = ui.button(state_btn_text).on_hover_text("Pause/Resume");
-                // if toggle_state_btn.clicked() {
-                //     self.channel_tx
-                //         .send(Message::UpdateState(torrent.state.clone(), index.clone()))
-                //         .unwrap();
-                // }
+                if toggle_state_btn.clicked() {
+                    self.channel_tx
+                        .send(Message::UpdateState(
+                            self.torrent.state.clone(),
+                            self.index.clone(),
+                        ))
+                        .unwrap();
+                }
 
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                     ui.add(torrent_title);

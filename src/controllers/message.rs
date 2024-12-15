@@ -4,6 +4,8 @@ use std::{
     time::Instant,
 };
 
+use egui_toast::Toasts;
+
 use crate::{
     models::{
         message::Message,
@@ -13,7 +15,7 @@ use crate::{
     AddTorrentKind,
 };
 
-use super::torrent::TorrentController;
+use super::torrent;
 
 include!("../../bindings.rs");
 
@@ -22,7 +24,8 @@ pub struct MessageController {
     pub torrents: Arc<Mutex<Vec<Torrent>>>,
     pub last_refresh: Box<Instant>,
     pub can_exit: Arc<Mutex<bool>>,
-    pub torrent_controller: TorrentController,
+    pub sel_torrent: Arc<Mutex<Option<usize>>>,
+    pub toasts: Arc<Mutex<Toasts>>,
 }
 
 impl MessageController {
@@ -41,7 +44,7 @@ impl MessageController {
 
                 if elapsed >= 0.9 || message == Message::ForcedRefresh {
                     unsafe { handle_alerts() }
-                    self.torrent_controller.refresh();
+                    torrent::refresh(self.torrents.clone());
                     self.last_refresh = Box::new(now);
                 }
             }
@@ -155,6 +158,8 @@ impl MessageController {
                     free_peers(c_peers, num_peers);
                 }
             }
+            Message::OpenDir(dir) => open::that(dir.to_string()).expect("Failed to open directory"),
+            Message::UpdateSelTorrent(new_sel) => *self.sel_torrent.lock().unwrap() = new_sel,
         }
     }
 }
