@@ -1,14 +1,12 @@
 use crate::models::{
-    message::{AddTorrentKind, Message},
+    message::AddTorrentKind,
     peer,
     torrent::{Torrent, TorrentFilePriority, TorrentPieceState, TorrentState},
 };
 use std::{
-    cell::Cell,
     ffi::{c_int, CStr, CString},
-    sync::{mpsc::Sender, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
-
 include!("../../bindings.rs");
 
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {

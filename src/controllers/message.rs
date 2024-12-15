@@ -1,5 +1,5 @@
 use std::{
-    ffi::{c_int, CStr, CString},
+    ffi::c_int,
     sync::{mpsc::Sender, Arc, Mutex},
     time::Instant,
 };
@@ -9,7 +9,6 @@ use egui_toast::Toasts;
 use super::torrent;
 use crate::models::{
     message::Message,
-    peer,
     torrent::{Torrent, TorrentState},
 };
 include!("../../bindings.rs");
