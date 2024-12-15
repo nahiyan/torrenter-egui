@@ -1,16 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(non_upper_case_globals)]
 
-use controllers::add_torrent::{self, handle_file_drop};
+use controllers::add_torrent;
 use controllers::message::MessageController;
 use eframe::egui;
-use egui::{Align, Align2, DroppedFile, Event, RichText, Sense};
+use egui::{Align, Align2, RichText, Sense};
 use egui::{Layout, Vec2};
 use egui_toast::Toasts;
-use models::message::{AddTorrentKind, Message};
+use models::message::Message;
 use models::tab::{Tab, TabView};
 use models::torrent::Torrent;
-use rfd::FileDialog;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 use std::{
