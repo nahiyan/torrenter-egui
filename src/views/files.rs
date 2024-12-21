@@ -2,9 +2,10 @@ use std::{collections::HashSet, sync::mpsc::Sender};
 
 use egui::{CollapsingHeader, Response, Ui, Widget};
 
-use crate::{
+use crate::models::{
     fs_tree::{FSTree, FSTreeNode},
-    models::{message::Message, torrent::TorrentFilePriority},
+    message::Message,
+    torrent::TorrentFilePriority,
 };
 
 pub struct FilesWidget<'a> {
@@ -127,7 +128,7 @@ impl<'a> Widget for FilesWidget<'a> {
 
                 draw_tree(tree, &mut file_priorities);
             }
-            Err(()) => {
+            Err(_) => {
                 ui.label("Failed to load files.");
             }
         };

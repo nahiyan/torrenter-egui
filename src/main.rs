@@ -24,7 +24,6 @@ use views::add_torrent::AddTorrentWidget;
 use views::torrent::TorrentWidget;
 mod bytes;
 pub mod controllers;
-mod fs_tree;
 pub mod models;
 mod tests;
 mod toasts;

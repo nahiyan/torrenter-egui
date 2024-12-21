@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::fs_tree::FSTree;
+    use crate::models::fs_tree::FSTree;
 
     use std::{collections::HashSet, path::Path};
 

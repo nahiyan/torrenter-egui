@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-enum ErrAddChild {
+pub enum ErrAddChild {
     ParentNotFound,
     ChildExists(usize),
 }
@@ -70,7 +70,7 @@ impl FSTree {
         }
     }
 
-    pub fn from_paths<T>(paths: Vec<T>) -> Result<Self, ()>
+    pub fn from_paths<T>(paths: Vec<T>) -> Result<Self, ErrAddChild>
     where
         T: Into<PathBuf>,
     {
@@ -88,15 +88,15 @@ impl FSTree {
                     path.is_dir()
                 };
 
-                let result = tree.add_child(parent_id, name.clone(), is_dir, path_id);
-                match result {
+                let res = tree.add_child(parent_id, name.clone(), is_dir, path_id);
+                match res {
                     Ok(id) => {
                         parent_id = id;
                     }
                     Err(ErrAddChild::ChildExists(id)) => {
                         parent_id = id;
                     }
-                    Err(ErrAddChild::ParentNotFound) => return Err(()),
+                    Err(ErrAddChild::ParentNotFound) => return Err(ErrAddChild::ParentNotFound),
                 }
             }
         }
