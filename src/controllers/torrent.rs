@@ -71,7 +71,6 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
             pieces
         };
         torrent.is_streaming = info.is_streaming;
-
         torrent.save_path = unsafe {
             CStr::from_ptr(info.save_path)
                 .to_str()
