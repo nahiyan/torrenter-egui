@@ -4,8 +4,7 @@
 use controllers::add_torrent;
 use controllers::message::MessageController;
 use eframe::egui;
-use egui::{Align, Align2, RichText, Sense};
-use egui::{Layout, Vec2};
+use egui::Align2;
 use egui_toast::Toasts;
 use models::message::Message;
 use models::tab::{Tab, TabView};
@@ -21,6 +20,7 @@ use std::{
     time::Duration,
 };
 use views::add_torrent::AddTorrentWidget;
+use views::tabs::TabWidget;
 use views::torrent::TorrentWidget;
 mod bytes;
 pub mod controllers;
@@ -28,8 +28,6 @@ pub mod models;
 mod tests;
 mod toasts;
 mod views;
-use views::files::FilesWidget;
-use views::peers::PeersWidget;
 include!("../bindings.rs");
 
 fn prepare_data_dir() -> PathBuf {
@@ -164,66 +162,12 @@ impl eframe::App for AppState {
                 // .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(0.0, 5.0)))
                 .show(ctx, |ui| {
                     ui.add_space(5.0);
-                    ui.horizontal(|ui| {
-                        ui.with_layout(Layout::right_to_left(Align::RIGHT), |ui| {
-                            // Close button
-                            if ui.button("✖").clicked() {
-                                *self.sel_torrent.lock().unwrap() = None;
-                            }
-
-                            // Tabs
-                            ui.with_layout(Layout::left_to_right(Align::RIGHT), |ui| {
-                                self.tab_view.tabs.iter_mut().for_each(
-                                    |(tab, text, is_hovered)| {
-                                        let rt = {
-                                            let rt = RichText::new(text.clone());
-                                            if tab.clone() == self.tab_view.selected {
-                                                rt.strong().underline()
-                                            } else if *is_hovered {
-                                                rt.underline()
-                                            } else {
-                                                rt
-                                            }
-                                        };
-                                        let label = ui
-                                            .label(rt)
-                                            .on_hover_cursor(egui::CursorIcon::PointingHand);
-                                        if label.clicked() {
-                                            self.tab_view.selected = tab.clone();
-                                        }
-                                        *is_hovered = label.hovered();
-                                    },
-                                );
-                            });
-                        });
-                    });
-                    ui.add_space(5.0);
-                    egui::ScrollArea::both().show(ui, |ui| {
-                        // Force the scroll area to expand horizontally
-                        ui.allocate_at_least(
-                            Vec2::new(ui.available_width(), 0.0),
-                            Sense::focusable_noninteractive(),
-                        );
-
-                        ui.add_space(5.0);
-
-                        match self.tab_view.selected {
-                            Tab::General => {
-                                todo!("Implement general tab")
-                            }
-                            Tab::Files => {
-                                ui.add(FilesWidget::new(&torrent.files, &self.channel_tx, index));
-                            }
-                            Tab::Peers => {
-                                self.channel_tx.send(Message::FetchPeers(index)).unwrap();
-
-                                ui.add(PeersWidget::new(&torrent.peers));
-                            }
-
-                            Tab::Trackers => {
-                                todo!("Implement trackers tab")
-                            }
-                        }
+                    ui.add(TabWidget {
+                        tab_view: &mut self.tab_view,
+                        channel_tx: &self.channel_tx,
+                        files: &torrent.files,
+                        peers: &torrent.peers,
+                        index,
                     });
                 });
         }
