@@ -159,7 +159,6 @@ impl eframe::App for AppState {
             egui::TopBottomPanel::bottom("torrent_info")
                 .resizable(true)
                 .min_height(200.0)
-                // .frame(egui::Frame::default().inner_margin(egui::Margin::symmetric(0.0, 5.0)))
                 .show(ctx, |ui| {
                     ui.add_space(5.0);
                     ui.add(TabWidget {
