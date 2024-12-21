@@ -16,7 +16,7 @@ pub enum Message {
     UpdateState(TorrentState, usize),
     UpdateSelTorrent(Option<usize>),
     ToggleStreamMode(usize),
-    ChangeFilePriority(usize, usize, TorrentFilePriority),
+    UpdateFilePriority(usize, usize, TorrentFilePriority),
     FetchPeers(usize),
     OpenDir(String),
 }

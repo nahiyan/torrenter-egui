@@ -66,7 +66,7 @@ impl MessageController {
                 torrent::toggle_stream_mode(index);
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
-            Message::ChangeFilePriority(index, f_index, priority) => {
+            Message::UpdateFilePriority(index, f_index, priority) => {
                 torrent::set_file_priority(index, f_index, priority);
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }

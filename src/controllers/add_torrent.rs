@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
 use egui::{Context, DroppedFile, Event};
 use egui_toast::Toasts;
@@ -38,7 +38,7 @@ pub fn handle_file_add(toasts: &mut Toasts, channel_tx: &Sender<Message>) {
         .add_filter("torrent", &["torrent"])
         .pick_file();
     if let Some(file_path) = file_path {
-        match file_path.extension() {
+        match file_path.extension().and_then(|e| e.to_str()) {
             Some("torrent") => {
                 channel_tx
                     .send(Message::AddTorrent(

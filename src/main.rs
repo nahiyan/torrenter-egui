@@ -213,7 +213,7 @@ impl eframe::App for AppState {
                                 todo!("Implement general tab")
                             }
                             Tab::Files => {
-                                ui.add(FilesWidget::new(&torrent.files));
+                                ui.add(FilesWidget::new(&torrent.files, &self.channel_tx, index));
                             }
                             Tab::Peers => {
                                 self.channel_tx.send(Message::FetchPeers(index)).unwrap();
