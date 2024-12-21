@@ -128,7 +128,7 @@ void initiate(const char *resume_dir) {
   }
 }
 
-const char *add_file(const char *file_path, const char *save_path) {
+bool add_file(const char *file_path, const char *save_path) {
   try {
     lt::add_torrent_params atp = lt::load_torrent_file(file_path);
     atp.save_path = save_path;
@@ -137,21 +137,25 @@ const char *add_file(const char *file_path, const char *save_path) {
     Torrent *t = new Torrent(h, atp, hash);
     state.torrents.push_back(t);
     write_resume_file(h, atp);
-    return t->hash.c_str();
+    return true;
   } catch (...) {
-    return nullptr;
+    return false;
   }
 }
 
-const char *add_magnet_url(const char *url, const char *save_path) {
-  lt::add_torrent_params atp = lt::parse_magnet_uri(url);
-  atp.save_path = save_path;
-  lt::torrent_handle h = state.ses->add_torrent(atp);
-  string hash = get_hash(h);
-  Torrent *t = new Torrent(h, atp, hash);
-  state.torrents.push_back(t);
-  write_resume_file(h, atp);
-  return t->hash.c_str();
+bool add_magnet_url(const char *url, const char *save_path) {
+  try {
+    lt::add_torrent_params atp = lt::parse_magnet_uri(url);
+    atp.save_path = save_path;
+    lt::torrent_handle h = state.ses->add_torrent(atp);
+    string hash = get_hash(h);
+    Torrent *t = new Torrent(h, atp, hash);
+    state.torrents.push_back(t);
+    write_resume_file(h, atp);
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
 int get_count() { return (int)state.torrents.size(); }
@@ -172,72 +176,99 @@ void handle_alerts() {
   }
 }
 
-void torrent_pause(int index) {
-  assert(index < state.torrents.size());
+bool torrent_pause(int index) {
+  try {
+    assert(index < state.torrents.size());
 
-  lt::torrent_handle &h = state.torrents[index]->h;
-  h.unset_flags(lt::torrent_flags::auto_managed);
-  h.set_flags(lt::torrent_flags::paused, lt::torrent_flags::paused);
-  h.pause();
+    lt::torrent_handle &h = state.torrents[index]->h;
+    h.unset_flags(lt::torrent_flags::auto_managed);
+    h.set_flags(lt::torrent_flags::paused, lt::torrent_flags::paused);
+    h.pause();
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
-void torrent_resume(int index) {
-  assert(index < state.torrents.size());
+bool torrent_resume(int index) {
+  try {
+    assert(index < state.torrents.size());
 
-  lt::torrent_handle &h = state.torrents[index]->h;
-  h.unset_flags(lt::torrent_flags::paused);
-  h.set_flags(lt::torrent_flags::auto_managed, lt::torrent_flags::auto_managed);
-  h.resume();
+    lt::torrent_handle &h = state.torrents[index]->h;
+    h.unset_flags(lt::torrent_flags::paused);
+    h.set_flags(lt::torrent_flags::auto_managed,
+                lt::torrent_flags::auto_managed);
+    h.resume();
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
-void torrent_remove(int index) {
-  assert(index < state.torrents.size());
+bool torrent_remove(int index) {
+  try {
+    assert(index < state.torrents.size());
 
-  // Remove resume file
-  fs::path rf_path = get_resume_file_path(state.torrents[index]->h);
-  std::remove(rf_path.c_str());
+    // Remove resume file
+    fs::path rf_path = get_resume_file_path(state.torrents[index]->h);
+    std::remove(rf_path.c_str());
 
-  // Remove from lt::session
-  state.ses->remove_torrent(state.torrents[index]->h);
+    // Remove from lt::session
+    state.ses->remove_torrent(state.torrents[index]->h);
 
-  // Remove from memory
-  delete state.torrents[index];
-  state.torrents.erase(state.torrents.begin() + index);
+    // Remove from memory
+    delete state.torrents[index];
+    state.torrents.erase(state.torrents.begin() + index);
+
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
-void toggle_stream(int index) {
-  assert(index < state.torrents.size());
+bool toggle_stream(int index) {
+  try {
+    assert(index < state.torrents.size());
 
-  lt::torrent_handle &h = state.torrents[index]->h;
-  bool is_seq = (h.flags() & lt::torrent_flags::sequential_download) ==
-                lt::torrent_flags::sequential_download;
-  // Roughly guess if we're streaming by priority of the last piece
-  int num_pieces = h.status().pieces.size();
-  assert(num_pieces > 0);
-  // TODO: Check last 1% of the pieces for priority
-  bool is_streaming =
-      is_seq && h.piece_priority(num_pieces - 1) == lt::top_priority;
+    lt::torrent_handle &h = state.torrents[index]->h;
+    bool is_seq = (h.flags() & lt::torrent_flags::sequential_download) ==
+                  lt::torrent_flags::sequential_download;
+    // Roughly guess if we're streaming by priority of the last piece
+    int num_pieces = h.status().pieces.size();
+    assert(num_pieces > 0);
+    // TODO: Check last 1% of the pieces for priority
+    bool is_streaming =
+        is_seq && h.piece_priority(num_pieces - 1) == lt::top_priority;
 
-  if (!is_streaming)
-    h.set_flags(lt::torrent_flags::sequential_download,
-                lt::torrent_flags::sequential_download);
-  else
-    h.unset_flags(lt::torrent_flags::sequential_download);
+    if (!is_streaming)
+      h.set_flags(lt::torrent_flags::sequential_download,
+                  lt::torrent_flags::sequential_download);
+    else
+      h.unset_flags(lt::torrent_flags::sequential_download);
 
-  // Set the priority for 1% (by size) of last pieces
-  int piece_length = h.torrent_file()->piece_length();
-  int torrent_size = h.torrent_file()->total_size();
-  int last_pieces_count = ceil(((float)torrent_size * 0.01) / piece_length);
-  for (int i = max(num_pieces - last_pieces_count, 0); i < num_pieces; i++)
-    h.piece_priority(i,
-                     !is_streaming ? lt::top_priority : lt::default_priority);
+    // Set the priority for 1% (by size) of last pieces
+    int piece_length = h.torrent_file()->piece_length();
+    int torrent_size = h.torrent_file()->total_size();
+    int last_pieces_count = ceil(((float)torrent_size * 0.01) / piece_length);
+    for (int i = max(num_pieces - last_pieces_count, 0); i < num_pieces; i++)
+      h.piece_priority(i,
+                       !is_streaming ? lt::top_priority : lt::default_priority);
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
-void change_file_priority(int index, int f_index, int priority) {
-  assert(index < state.torrents.size());
+bool change_file_priority(int index, int f_index, int priority) {
+  try {
+    assert(index < state.torrents.size());
 
-  lt::torrent_handle &h = state.torrents[index]->h;
-  h.file_priority(f_index, (lt::download_priority_t)priority);
+    lt::torrent_handle &h = state.torrents[index]->h;
+    h.file_priority(f_index, (lt::download_priority_t)priority);
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
 struct TorrentInfo get_torrent_info(int index) {

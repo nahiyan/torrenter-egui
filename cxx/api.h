@@ -48,16 +48,16 @@ void initiate(const char *resume_dir);
 void destroy();
 
 // Torrent management
-const char *add_file(const char *file_path, const char *save_path);
-const char *add_magnet_url(const char *url, const char *save_path);
+bool add_file(const char *file_path, const char *save_path);
+bool add_magnet_url(const char *url, const char *save_path);
 int get_count();
 void handle_alerts();
 struct TorrentInfo get_torrent_info(int index);
-void torrent_pause(int index);
-void torrent_resume(int index);
-void torrent_remove(int index);
-void toggle_stream(int index);
-void change_file_priority(int, int, int);
+bool torrent_pause(int index);
+bool torrent_resume(int index);
+bool torrent_remove(int index);
+bool toggle_stream(int index);
+bool change_file_priority(int, int, int);
 struct Peer *get_peers(int, int *);
 void free_peers(struct Peer *, int);
 

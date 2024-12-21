@@ -1,17 +1,29 @@
+use std::{collections::HashSet, sync::mpsc::Sender};
+
 use egui::{CollapsingHeader, Response, Ui, Widget};
 
 use crate::{
     fs_tree::{FSTree, FSTreeNode},
-    models::torrent::TorrentFilePriority,
+    models::{message::Message, torrent::TorrentFilePriority},
 };
 
 pub struct FilesWidget<'a> {
     files: &'a Vec<(String, TorrentFilePriority)>,
+    channel_tx: &'a Sender<Message>,
+    torrent_index: usize,
 }
 
 impl<'a> FilesWidget<'a> {
-    pub fn new(files: &'a Vec<(String, TorrentFilePriority)>) -> Self {
-        Self { files }
+    pub fn new(
+        files: &'a Vec<(String, TorrentFilePriority)>,
+        channel_tx: &'a Sender<Message>,
+        index: usize,
+    ) -> Self {
+        Self {
+            files,
+            channel_tx,
+            torrent_index: index,
+        }
     }
 }
 
@@ -29,38 +41,87 @@ impl<'a> Widget for FilesWidget<'a> {
                 assert!(!tree.nodes.is_empty());
 
                 let mut draw_tree = |tree: FSTree, priorities: &mut Vec<bool>| {
-                    // TODO: Make it dynamic
-                    let mut checked = true;
-
                     fn draw_node(
                         node: &FSTreeNode,
                         tree: &FSTree,
                         ui: &mut Ui,
-                        checked: &mut bool,
+                        channel_tx: &Sender<Message>,
                         priorities: &mut Vec<bool>,
+                        torrent_index: usize,
                     ) {
                         if node.is_dir {
+                            // Directory
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 0.0;
-                                ui.checkbox(checked, "");
+                                let mut children_ids = HashSet::<usize>::new();
+                                tree.path_ids(node, &mut children_ids);
+                                let mut is_checked =
+                                    { children_ids.iter().all(|i| priorities[*i]) };
+                                let checkbox = ui.checkbox(&mut is_checked, "");
+                                if checkbox.changed() {
+                                    let new_priority = if is_checked {
+                                        TorrentFilePriority::Default
+                                    } else {
+                                        TorrentFilePriority::Skip
+                                    };
+
+                                    for child_id in children_ids {
+                                        channel_tx
+                                            .send(Message::UpdateFilePriority(
+                                                torrent_index,
+                                                child_id,
+                                                new_priority.clone(),
+                                            ))
+                                            .unwrap()
+                                    }
+                                }
+
                                 CollapsingHeader::new(&node.name).show(ui, |ui| {
                                     for index in &node.children_indices {
                                         let child_node = &tree.nodes[*index];
-                                        draw_node(child_node, tree, ui, checked, priorities);
+                                        draw_node(
+                                            child_node,
+                                            tree,
+                                            ui,
+                                            channel_tx,
+                                            priorities,
+                                            torrent_index,
+                                        );
                                     }
                                 });
                             });
                         } else {
+                            // File
                             let path_id = node.path_id;
                             let checkbox = ui.checkbox(&mut priorities[path_id], &node.name);
-                            if checkbox.changed() {}
+                            if checkbox.changed() {
+                                let new_priority = if priorities[path_id] {
+                                    TorrentFilePriority::Default
+                                } else {
+                                    TorrentFilePriority::Skip
+                                };
+                                channel_tx
+                                    .send(Message::UpdateFilePriority(
+                                        torrent_index,
+                                        path_id,
+                                        new_priority,
+                                    ))
+                                    .unwrap();
+                            }
                         }
                     }
 
                     let root = &tree.nodes[0];
                     for index in &root.children_indices {
                         let root_child = &tree.nodes[*index];
-                        draw_node(root_child, &tree, ui, &mut checked, priorities);
+                        draw_node(
+                            root_child,
+                            &tree,
+                            ui,
+                            self.channel_tx,
+                            priorities,
+                            self.torrent_index,
+                        );
                     }
                 };
 
