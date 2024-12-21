@@ -23,7 +23,10 @@ mod tests {
 
         let tree = FSTree::from_paths(paths);
         assert!(tree.is_ok());
-        let tree = tree.unwrap();
+        let tree = match tree {
+            Ok(tree) => tree,
+            _ => panic!("Failed to unwrap tree!"),
+        };
 
         // Tree should have 2 children: Season 1, Season 2.
         let root = &tree.nodes[0];
