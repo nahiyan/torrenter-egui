@@ -21,8 +21,6 @@ struct TorrentInfo {
   long total_size, download_rate, upload_rate, total_pieces;
   char *pieces;
   bool is_streaming;
-  int num_files;
-  struct File *files;
 };
 
 struct Peer {
@@ -58,6 +56,8 @@ bool torrent_resume(int index);
 bool torrent_remove(int index);
 bool toggle_stream(int index);
 bool change_file_priority(int, int, int);
+struct File *get_files(int index, int *num_files);
+void free_files(struct File *files, int num_files);
 struct Peer *get_peers(int, int *);
 void free_peers(struct Peer *, int);
 

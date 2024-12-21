@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::peer::Peer;
+use super::{file::File, peer::Peer};
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TorrentFilePriority {
@@ -62,7 +62,7 @@ pub struct Torrent {
     pub pieces: Vec<TorrentPieceState>,
     pub is_streaming: bool,
     pub num_files: i32,
-    pub files: Vec<(String, TorrentFilePriority)>,
+    pub files: Vec<File>,
     pub peers: Vec<Peer>,
 }
 

@@ -136,7 +136,6 @@ impl Default for AppState {
                     (Tab::General, "General".to_owned(), false),
                     (Tab::Files, "Files".to_owned(), false),
                     (Tab::Peers, "Peers".to_owned(), false),
-                    (Tab::Trackers, "Trackers".to_owned(), false),
                 ],
                 selected: Tab::Files,
             },

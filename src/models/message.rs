@@ -18,5 +18,6 @@ pub enum Message {
     ToggleStreamMode(usize),
     UpdateFilePriority(usize, usize, TorrentFilePriority),
     FetchPeers(usize),
+    FetchFiles(usize),
     OpenDir(String),
 }

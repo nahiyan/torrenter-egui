@@ -2,6 +2,7 @@ use egui_toast::Toasts;
 
 use crate::{
     models::{
+        file,
         message::AddTorrentKind,
         peer,
         torrent::{Torrent, TorrentFilePriority, TorrentPieceState, TorrentState},
@@ -70,31 +71,7 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
             pieces
         };
         torrent.is_streaming = info.is_streaming;
-        torrent.num_files = info.num_files;
-        torrent.files = unsafe {
-            if torrent.num_files > 0 {
-                let files = std::slice::from_raw_parts(info.files, info.num_files as usize);
-                files
-                    .iter()
-                    .map(|file| {
-                        let path = CStr::from_ptr(file.path)
-                            .to_str()
-                            .expect("Failed to get C string")
-                            .to_string();
-                        let priority = match file.priority {
-                            0 => TorrentFilePriority::Skip,
-                            1 => TorrentFilePriority::Low,
-                            4 => TorrentFilePriority::Default,
-                            7 => TorrentFilePriority::High,
-                            _ => TorrentFilePriority::Default,
-                        };
-                        (path, priority)
-                    })
-                    .collect()
-            } else {
-                vec![]
-            }
-        };
+
         torrent.save_path = unsafe {
             CStr::from_ptr(info.save_path)
                 .to_str()
@@ -224,5 +201,34 @@ pub fn fetch_peers(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
             peers.push(peer);
         }
         free_peers(c_peers, num_peers);
+    }
+}
+
+pub fn fetch_files(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
+    let mut num_files: c_int = 0;
+    let num_files_ptr = &mut num_files;
+    let mut torrents = torrents.lock().unwrap();
+    let files = &mut torrents[index].files;
+    files.clear();
+    unsafe {
+        let c_files = get_files(index as c_int, num_files_ptr);
+        for i in 0..num_files {
+            let c_file = *c_files.add(i as usize);
+            let path = CStr::from_ptr(c_file.path)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string();
+            let priority = match c_file.priority {
+                0 => TorrentFilePriority::Skip,
+                1 => TorrentFilePriority::Low,
+                4 => TorrentFilePriority::Default,
+                7 => TorrentFilePriority::High,
+                _ => TorrentFilePriority::Default,
+            };
+            let file = file::File { path, priority };
+            files.push(file);
+        }
+        assert!(num_files > 0);
+        free_files(c_files, num_files);
     }
 }

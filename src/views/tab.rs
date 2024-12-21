@@ -3,18 +3,18 @@ use std::sync::mpsc::Sender;
 use egui::{Align, Layout, RichText, Sense, Vec2, Widget};
 
 use crate::models::{
+    file::File,
     message::Message,
     peer::Peer,
     tab::{Tab, TabView},
-    torrent::TorrentFilePriority,
 };
 
-use super::{files::FilesWidget, peers::PeersWidget};
+use super::{files::FilesWidget, general::GeneralWidget, peers::PeersWidget};
 
 pub struct TabWidget<'a> {
     pub tab_view: &'a mut TabView,
     pub channel_tx: &'a Sender<Message>,
-    pub files: &'a Vec<(String, TorrentFilePriority)>,
+    pub files: &'a Vec<File>,
     pub peers: &'a Vec<Peer>,
     pub index: usize,
 }
@@ -68,9 +68,13 @@ impl<'a> Widget for TabWidget<'a> {
 
             match self.tab_view.selected {
                 Tab::General => {
-                    todo!("Implement general tab")
+                    ui.add(GeneralWidget {});
                 }
                 Tab::Files => {
+                    self.channel_tx
+                        .send(Message::FetchFiles(self.index))
+                        .unwrap();
+
                     ui.add(FilesWidget::new(self.files, self.channel_tx, self.index));
                 }
                 Tab::Peers => {
@@ -79,10 +83,6 @@ impl<'a> Widget for TabWidget<'a> {
                         .unwrap();
 
                     ui.add(PeersWidget::new(self.peers));
-                }
-
-                Tab::Trackers => {
-                    todo!("Implement trackers tab")
                 }
             }
         });

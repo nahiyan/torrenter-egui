@@ -58,6 +58,10 @@ impl MessageController {
                 torrent::set_file_priority(index, f_index, priority, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
+            Message::FetchFiles(index) => {
+                let torrents = self.torrents.clone();
+                torrent::fetch_files(index, torrents);
+            }
             Message::FetchPeers(index) => {
                 let torrents = self.torrents.clone();
                 torrent::fetch_peers(index, torrents);

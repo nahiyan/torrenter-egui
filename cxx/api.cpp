@@ -321,36 +321,10 @@ struct TorrentInfo get_torrent_info(int index) {
   info.is_streaming = (h.flags() & lt::torrent_flags::sequential_download) ==
                       lt::torrent_flags::sequential_download;
 
-  // TODO: Load file information in a separate function
-  // Files
-  auto file_priorities = h.get_file_priorities();
-  if (torrent_info != nullptr) {
-    info.num_files = torrent_info->files().num_files();
-    info.files = new File[info.num_files];
-    for (int i = 0; i < info.num_files; i++) {
-      string fpath = torrent_info->files().file_path(i);
-      assert(!fpath.empty());
-      File &file = info.files[i];
-      file.path = new char[fpath.size() + 1];
-      copy(fpath.begin(), fpath.end(), info.files[i].path);
-      file.path[fpath.size()] = '\0';
-      file.priority = file_priorities[i];
-    }
-  } else {
-    info.num_files = 0;
-  }
-
   return info;
 }
 
-void free_torrent_info(TorrentInfo info) {
-  delete[] info.pieces;
-  for (int i = 0; i < info.num_files; i++) {
-    delete[] info.files[i].path;
-  }
-  if (info.num_files > 0)
-    delete[] info.files;
-}
+void free_torrent_info(TorrentInfo info) { delete[] info.pieces; }
 
 Peer *get_peers(int index, int *num_peers) {
   assert(index < state.torrents.size());
@@ -379,10 +353,41 @@ Peer *get_peers(int index, int *num_peers) {
 }
 
 void free_peers(Peer *peers, int num_peers) {
-  for (int i = 0; i < num_peers; i++) {
+  for (int i = 0; i < num_peers; i++)
     delete[] peers[i].ip_address;
-  }
   delete[] peers;
+}
+
+File *get_files(int index, int *num_files) {
+  // Files
+  assert(index < state.torrents.size());
+  auto &h = state.torrents[index]->h;
+  auto file_priorities = h.get_file_priorities();
+  auto torrent_info = h.torrent_file();
+  File *files = nullptr;
+  if (torrent_info != nullptr) {
+    *num_files = torrent_info->files().num_files();
+    files = new File[*num_files];
+    for (int i = 0; i < *num_files; i++) {
+      string fpath = torrent_info->files().file_path(i);
+      assert(!fpath.empty());
+      File &file = files[i];
+      file.path = new char[fpath.size() + 1];
+      copy(fpath.begin(), fpath.end(), files[i].path);
+      file.path[fpath.size()] = '\0';
+      file.priority = file_priorities[i];
+    }
+  } else {
+    *num_files = 0;
+  }
+
+  return files;
+}
+
+void free_files(File *files, int num_files) {
+  for (int i = 0; i < num_files; i++)
+    delete[] files[i].path;
+  delete[] files;
 }
 
 void destroy() {

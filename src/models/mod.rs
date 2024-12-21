@@ -1,3 +1,4 @@
+pub mod file;
 pub mod fs_tree;
 pub mod message;
 pub mod peer;

@@ -3,23 +3,20 @@ use std::{collections::HashSet, sync::mpsc::Sender};
 use egui::{CollapsingHeader, Response, Ui, Widget};
 
 use crate::models::{
+    file::File,
     fs_tree::{FSTree, FSTreeNode},
     message::Message,
     torrent::TorrentFilePriority,
 };
 
 pub struct FilesWidget<'a> {
-    files: &'a Vec<(String, TorrentFilePriority)>,
+    files: &'a Vec<File>,
     channel_tx: &'a Sender<Message>,
     torrent_index: usize,
 }
 
 impl<'a> FilesWidget<'a> {
-    pub fn new(
-        files: &'a Vec<(String, TorrentFilePriority)>,
-        channel_tx: &'a Sender<Message>,
-        index: usize,
-    ) -> Self {
+    pub fn new(files: &'a Vec<File>, channel_tx: &'a Sender<Message>, index: usize) -> Self {
         Self {
             files,
             channel_tx,
@@ -30,11 +27,15 @@ impl<'a> FilesWidget<'a> {
 
 impl<'a> Widget for FilesWidget<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let paths = self.files.iter().map(|(name, _)| name).collect();
+        let paths = self
+            .files
+            .iter()
+            .map(|File { path, priority: _ }| path)
+            .collect();
         let mut file_priorities: Vec<bool> = self
             .files
             .iter()
-            .map(|(_, priority)| !matches!(priority, TorrentFilePriority::Skip))
+            .map(|File { path: _, priority }| !matches!(priority, TorrentFilePriority::Skip))
             .collect();
         let tree = FSTree::from_paths(paths);
         match tree {
