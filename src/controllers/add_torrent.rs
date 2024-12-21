@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::{ffi::OsStr, sync::mpsc::Sender};
 
 use egui::{Context, DroppedFile, Event};
 use egui_toast::Toasts;
@@ -39,23 +39,21 @@ pub fn handle_file_add(toasts: &mut Toasts, channel_tx: &Sender<Message>) {
         .pick_file();
     if let Some(file_path) = file_path {
         match file_path.extension() {
-            Some(extension) => {
-                if extension == "torrent" {
-                    channel_tx
-                        .send(Message::AddTorrent(
-                            file_path
-                                .to_str()
-                                .expect("Failed to convert path to str")
-                                .to_string(),
-                            AddTorrentKind::File,
-                        ))
-                        .unwrap();
-                    toasts::success(toasts, "Added the new torrent.");
-                } else {
-                    toasts::error(toasts, "Only .torrent files are accepted.");
-                }
+            Some("torrent") => {
+                channel_tx
+                    .send(Message::AddTorrent(
+                        file_path
+                            .to_str()
+                            .expect("Failed to convert path to str")
+                            .to_string(),
+                        AddTorrentKind::File,
+                    ))
+                    .unwrap();
+                toasts::success(toasts, "Added the new torrent.");
             }
-            None => {}
+            _ => {
+                toasts::error(toasts, "Only .torrent files are accepted.");
+            }
         }
     }
 }
