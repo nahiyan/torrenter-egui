@@ -22,7 +22,7 @@ pub struct TorrentWidget<'a> {
 impl<'a> Widget for TorrentWidget<'a> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         let torrent_title = {
-            let name = if self.torrent.name == "".to_string() {
+            let name = if self.torrent.name.trim().is_empty() {
                 &self.torrent.hash
             } else {
                 &self.torrent.name
@@ -37,7 +37,7 @@ impl<'a> Widget for TorrentWidget<'a> {
                 let remove_btn = ui.button("✖").on_hover_text("Remove".to_owned());
                 if remove_btn.clicked() {
                     self.channel_tx
-                        .send(Message::RemoveTorrent(self.index.clone()))
+                        .send(Message::RemoveTorrent(self.index))
                         .unwrap();
                 }
 
@@ -51,7 +51,7 @@ impl<'a> Widget for TorrentWidget<'a> {
                     .on_hover_text("Stream");
                 if stream_btn.clicked() {
                     self.channel_tx
-                        .send(Message::ToggleStreamMode(self.index.clone()))
+                        .send(Message::ToggleStreamMode(self.index))
                         .unwrap();
                 }
 
@@ -92,10 +92,7 @@ impl<'a> Widget for TorrentWidget<'a> {
                 let toggle_state_btn = ui.button(state_btn_text).on_hover_text("Pause/Resume");
                 if toggle_state_btn.clicked() {
                     self.channel_tx
-                        .send(Message::UpdateState(
-                            self.torrent.state.clone(),
-                            self.index.clone(),
-                        ))
+                        .send(Message::UpdateState(self.torrent.state.clone(), self.index))
                         .unwrap();
                 }
 
@@ -132,12 +129,8 @@ impl<'a> Widget for TorrentWidget<'a> {
                     _ => "⭕",
                 };
                 ui.label(
-                    RichText::new(format!(
-                        "{} {}",
-                        state_emoji,
-                        self.torrent.state.to_string()
-                    ))
-                    .color(state_color),
+                    RichText::new(format!("{} {}", state_emoji, self.torrent.state))
+                        .color(state_color),
                 );
 
                 // Label

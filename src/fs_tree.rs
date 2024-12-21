@@ -40,7 +40,7 @@ impl FSTree {
         path_id: usize,
     ) -> Result<usize, ErrAddChild> {
         assert!(!self.nodes.is_empty());
-        let id = self.nodes.len() as usize;
+        let id = self.nodes.len();
 
         let new_node = FSTreeNode {
             name: name.clone(),
@@ -75,8 +75,7 @@ impl FSTree {
         T: Into<PathBuf>,
     {
         let mut tree = FSTree::new();
-        let mut path_id = 0;
-        for path in paths {
+        for (path_id, path) in paths.into_iter().enumerate() {
             let path: PathBuf = path.into();
             let mut parent_id = 0;
             let comps = path.components();
@@ -100,7 +99,6 @@ impl FSTree {
                     Err(ErrAddChild::ParentNotFound) => return Err(()),
                 }
             }
-            path_id += 1;
         }
         Ok(tree)
     }

@@ -28,7 +28,7 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
 
     for index in 0..torrents_count {
         let torrent = torrents
-            .get_mut(index as usize)
+            .get_mut(index)
             .expect("Failed to get torrent by index");
         let info = unsafe { get_torrent_info(index as c_int) };
         torrent.progress = info.progress;
@@ -118,19 +118,18 @@ pub fn add_torrent(path: String, kind: AddTorrentKind, toasts: Arc<Mutex<Toasts>
     let path_cstr = CString::new(path).expect("Failed to create CString");
     let mut toasts = toasts.lock().unwrap();
 
-    let res: bool;
-    match kind {
+    let res = match kind {
         AddTorrentKind::MagnetUrl => {
             let magnet_url_cstr = path_cstr;
             // TODO: Handle errors
-            res = unsafe { add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) };
+            unsafe { add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) }
         }
         AddTorrentKind::File => {
             let file_path_cstr = path_cstr;
             // TODO: Handle errors
-            res = unsafe { add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) };
+            unsafe { add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) }
         }
-    }
+    };
 
     if res {
         toasts::success(&mut toasts, trnt_add_success_msg);

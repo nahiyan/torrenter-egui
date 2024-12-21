@@ -1,5 +1,4 @@
 use std::{
-    ffi::c_int,
     sync::{mpsc::Sender, Arc, Mutex},
     time::Instant,
 };
@@ -7,10 +6,7 @@ use std::{
 use egui_toast::Toasts;
 
 use super::torrent;
-use crate::models::{
-    message::Message,
-    torrent::{Torrent, TorrentState},
-};
+use crate::models::{message::Message, torrent::Torrent};
 include!("../../bindings.rs");
 
 pub struct MessageController {
@@ -66,7 +62,7 @@ impl MessageController {
                 let torrents = self.torrents.clone();
                 torrent::fetch_peers(index, torrents);
             }
-            Message::OpenDir(dir) => open::that(dir.to_string()).expect("Failed to open directory"),
+            Message::OpenDir(dir) => open::that(&dir).expect("Failed to open directory"),
             Message::UpdateSelTorrent(new_sel) => *self.sel_torrent.lock().unwrap() = new_sel,
         }
     }

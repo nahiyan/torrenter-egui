@@ -180,7 +180,7 @@ impl eframe::App for AppState {
                                             let rt = RichText::new(text.clone());
                                             if tab.clone() == self.tab_view.selected {
                                                 rt.strong().underline()
-                                            } else if is_hovered.clone() {
+                                            } else if *is_hovered {
                                                 rt.underline()
                                             } else {
                                                 rt

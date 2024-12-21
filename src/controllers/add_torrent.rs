@@ -9,7 +9,7 @@ use crate::{
     toasts,
 };
 
-pub fn handle_file_drop(dropped_files: &Vec<DroppedFile>, channel_tx: &Sender<Message>) {
+pub fn handle_file_drop(dropped_files: &[DroppedFile], channel_tx: &Sender<Message>) {
     if let Some(DroppedFile {
         path: Some(file_path),
         mime: _,
@@ -55,14 +55,11 @@ pub fn handle_file_add(toasts: &mut Toasts, channel_tx: &Sender<Message>) {
 pub fn handle_magnet_pastes(ctx: &Context, channel_tx: &Sender<Message>) {
     ctx.input(|r| {
         for event in &r.events {
-            match event {
-                Event::Paste(text) => {
-                    let magnet_url = text.trim().to_string();
-                    channel_tx
-                        .send(Message::AddTorrent(magnet_url, AddTorrentKind::MagnetUrl))
-                        .unwrap();
-                }
-                _ => {}
+            if let Event::Paste(text) = event {
+                let magnet_url = text.trim().to_string();
+                channel_tx
+                    .send(Message::AddTorrent(magnet_url, AddTorrentKind::MagnetUrl))
+                    .unwrap();
             }
         }
     });

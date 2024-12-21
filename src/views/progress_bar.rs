@@ -28,7 +28,7 @@ impl Widget for CompoundProgressBar<'_> {
 
             let mut groups: Vec<(u32, u32, u32)> = (0..groups_count).map(|_| (0, 0, 0)).collect();
             for (i, piece) in self.torrent.pieces.iter().enumerate() {
-                let group_index = (i as f32 / group_size as f32).floor() as usize;
+                let group_index = (i as f32 / group_size).floor() as usize;
                 let (c_pieces, q_pieces, i_pieces) = &mut groups[group_index];
                 let c = match *piece {
                     TorrentPieceState::Complete => c_pieces,
@@ -49,8 +49,7 @@ impl Widget for CompoundProgressBar<'_> {
                 })
                 .collect();
 
-            let mut i = 0;
-            for rect in rects {
+            for (i, rect) in rects.iter().enumerate() {
                 // c -> complete
                 // q -> queued
                 // i -> incomplete
@@ -68,11 +67,10 @@ impl Widget for CompoundProgressBar<'_> {
                 };
                 // TODO: Allocate this space in the ui
                 ui.painter().rect_filled(
-                    ui.painter().round_rect_to_pixels(rect),
+                    ui.painter().round_rect_to_pixels(*rect),
                     Rounding::from(0.0),
                     color,
                 );
-                i += 1;
             }
         })
         .response
