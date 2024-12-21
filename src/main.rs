@@ -243,7 +243,7 @@ impl eframe::App for AppState {
                 ));
                 ui.add_space(10.0);
                 let dropped_files = ctx.input(|r| r.raw.dropped_files.clone());
-                add_torrent::handle_file_drop(&dropped_files, &mut toasts, &self.channel_tx);
+                add_torrent::handle_file_drop(&dropped_files, &self.channel_tx);
 
                 // Handle "torrent add" from a file
                 if add_btn_clicked {
@@ -251,7 +251,7 @@ impl eframe::App for AppState {
                 }
 
                 // Listen for pasted magnet URLs
-                add_torrent::handle_magnet_pastes(ctx, &mut toasts, &self.channel_tx);
+                add_torrent::handle_magnet_pastes(ctx, &self.channel_tx);
 
                 if !torrents.is_empty() {
                     ui.heading("Torrents");

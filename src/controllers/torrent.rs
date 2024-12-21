@@ -1,13 +1,24 @@
-use crate::models::{
-    message::AddTorrentKind,
-    peer,
-    torrent::{Torrent, TorrentFilePriority, TorrentPieceState, TorrentState},
+use egui_toast::Toasts;
+
+use crate::{
+    models::{
+        message::AddTorrentKind,
+        peer,
+        torrent::{Torrent, TorrentFilePriority, TorrentPieceState, TorrentState},
+    },
+    toasts,
 };
 use std::{
     ffi::{c_int, CStr, CString},
     sync::{Arc, Mutex},
 };
 include!("../../bindings.rs");
+const trnt_add_fail_msg: &str = "Failed to add new torrent.";
+const trnt_add_success_msg: &str = "Added new torrent.";
+const trnt_remove_success_msg: &str = "Removed torrent.";
+const trnt_remove_fail_msg: &str = "Failed to remove torrent.";
+const trnt_set_file_priority_fail_msg: &str = "Failed to change priority.";
+const trnt_set_state_fail_msg: &str = "Failed to pause/resume torrent state.";
 
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     let torrents_count = unsafe { get_count() as usize };
@@ -97,7 +108,7 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     }
 }
 
-pub fn add_torrent(path: String, kind: AddTorrentKind) {
+pub fn add_torrent(path: String, kind: AddTorrentKind, toasts: Arc<Mutex<Toasts>>) {
     let downloads_dir = dirs::download_dir()
         .expect("Failed to get downloads dir.")
         .to_str()
@@ -105,60 +116,81 @@ pub fn add_torrent(path: String, kind: AddTorrentKind) {
         .to_owned();
     let downloads_dir_cstr = CString::new(downloads_dir.clone()).expect("Failed to create CString");
     let path_cstr = CString::new(path).expect("Failed to create CString");
+    let mut toasts = toasts.lock().unwrap();
 
+    let res: bool;
     match kind {
         AddTorrentKind::MagnetUrl => {
             let magnet_url_cstr = path_cstr;
             // TODO: Handle errors
-            unsafe {
-                let hash_cstr =
-                    add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
-                CStr::from_ptr(hash_cstr)
-                    .to_str()
-                    .expect("Failed to work with cstr")
-                    .to_string()
-            };
+            res = unsafe { add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) };
         }
         AddTorrentKind::File => {
             let file_path_cstr = path_cstr;
             // TODO: Handle errors
-            unsafe {
-                let hash_cstr = add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr());
-                // hash_cstr.as_ref().is_none();
-                CStr::from_ptr(hash_cstr)
-                    .to_str()
-                    .expect("Failed to work with cstr")
-                    .to_string()
-            };
+            res = unsafe { add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) };
         }
     }
-}
 
-pub fn remove(index: usize) {
-    unsafe {
-        torrent_remove(index as c_int);
+    if res {
+        toasts::success(&mut toasts, trnt_add_success_msg);
+    } else {
+        toasts::error(&mut toasts, trnt_add_fail_msg);
     }
 }
 
-pub fn toggle_stream_mode(index: usize) {
-    unsafe {
-        toggle_stream(index as c_int);
+pub fn remove(index: usize, toasts: Arc<Mutex<Toasts>>) {
+    let mut toasts = toasts.lock().unwrap();
+    let res = unsafe { torrent_remove(index as c_int) };
+    if res {
+        toasts::success(&mut toasts, trnt_remove_success_msg);
+    } else {
+        toasts::error(&mut toasts, trnt_remove_fail_msg);
     }
 }
 
-pub fn set_file_priority(index: usize, f_index: usize, priority: TorrentFilePriority) {
+pub fn toggle_stream_mode(index: usize, toasts: Arc<Mutex<Toasts>>) {
+    let mut toasts = toasts.lock().unwrap();
+    let res = unsafe { toggle_stream(index as c_int) };
+    if !res {
+        toasts::error(&mut toasts, trnt_remove_fail_msg);
+    }
+}
+
+pub fn set_file_priority(
+    index: usize,
+    f_index: usize,
+    priority: TorrentFilePriority,
+    toasts: Arc<Mutex<Toasts>>,
+) {
+    let mut toasts = toasts.lock().unwrap();
     let lt_download_priority = match priority {
         TorrentFilePriority::Skip => 0,
         TorrentFilePriority::Low => 1,
         TorrentFilePriority::Default => 4,
         TorrentFilePriority::High => 7,
     };
-    unsafe {
+    let res = unsafe {
         change_file_priority(
             index as c_int,
             f_index as c_int,
             lt_download_priority as c_int,
-        );
+        )
+    };
+    if !res {
+        toasts::error(&mut toasts, trnt_set_file_priority_fail_msg);
+    }
+}
+
+pub fn toggle_state(index: usize, state: TorrentState, toasts: Arc<Mutex<Toasts>>) {
+    let mut toasts = toasts.lock().unwrap();
+    let res = if state == TorrentState::Paused {
+        unsafe { torrent_resume(index as c_int) }
+    } else {
+        unsafe { torrent_pause(index as c_int) }
+    };
+    if !res {
+        toasts::error(&mut toasts, trnt_set_state_fail_msg);
     }
 }
 

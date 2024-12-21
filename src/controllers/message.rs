@@ -43,31 +43,23 @@ impl MessageController {
                 }
             }
             Message::AddTorrent(path, kind) => {
-                torrent::add_torrent(path, kind);
+                torrent::add_torrent(path, kind, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
             Message::UpdateState(state, index) => {
-                if state == TorrentState::Paused {
-                    unsafe {
-                        torrent_resume(index as c_int);
-                    }
-                } else {
-                    unsafe {
-                        torrent_pause(index as c_int);
-                    }
-                }
+                torrent::toggle_state(index, state, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
             Message::RemoveTorrent(index) => {
-                torrent::remove(index);
+                torrent::remove(index, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
             Message::ToggleStreamMode(index) => {
-                torrent::toggle_stream_mode(index);
+                torrent::toggle_stream_mode(index, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
             Message::UpdateFilePriority(index, f_index, priority) => {
-                torrent::set_file_priority(index, f_index, priority);
+                torrent::set_file_priority(index, f_index, priority, self.toasts.clone());
                 self.tx.send(Message::ForcedRefresh).unwrap();
             }
             Message::FetchPeers(index) => {

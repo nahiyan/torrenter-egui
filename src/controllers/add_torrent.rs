@@ -9,11 +9,7 @@ use crate::{
     toasts,
 };
 
-pub fn handle_file_drop(
-    dropped_files: &Vec<DroppedFile>,
-    toasts: &mut Toasts,
-    channel_tx: &Sender<Message>,
-) {
+pub fn handle_file_drop(dropped_files: &Vec<DroppedFile>, channel_tx: &Sender<Message>) {
     if let Some(DroppedFile {
         path: Some(file_path),
         mime: _,
@@ -29,7 +25,6 @@ pub fn handle_file_drop(
         channel_tx
             .send(Message::AddTorrent(file_path, AddTorrentKind::File))
             .unwrap();
-        toasts::success(toasts, "Added the new torrent.");
     }
 }
 
@@ -49,7 +44,6 @@ pub fn handle_file_add(toasts: &mut Toasts, channel_tx: &Sender<Message>) {
                         AddTorrentKind::File,
                     ))
                     .unwrap();
-                toasts::success(toasts, "Added the new torrent.");
             }
             _ => {
                 toasts::error(toasts, "Only .torrent files are accepted.");
@@ -58,7 +52,7 @@ pub fn handle_file_add(toasts: &mut Toasts, channel_tx: &Sender<Message>) {
     }
 }
 
-pub fn handle_magnet_pastes(ctx: &Context, toasts: &mut Toasts, channel_tx: &Sender<Message>) {
+pub fn handle_magnet_pastes(ctx: &Context, channel_tx: &Sender<Message>) {
     ctx.input(|r| {
         for event in &r.events {
             match event {
@@ -67,8 +61,6 @@ pub fn handle_magnet_pastes(ctx: &Context, toasts: &mut Toasts, channel_tx: &Sen
                     channel_tx
                         .send(Message::AddTorrent(magnet_url, AddTorrentKind::MagnetUrl))
                         .unwrap();
-
-                    toasts::success(toasts, "Added the new torrent.");
                 }
                 _ => {}
             }
