@@ -53,9 +53,10 @@ impl<'a> Widget for FilesWidget<'a> {
                             // Directory
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 0.0;
-                                let mut ids = HashSet::<usize>::new();
-                                tree.path_ids(node, &mut ids);
-                                let mut is_checked = { ids.iter().all(|i| priorities[*i]) };
+                                let mut children_ids = HashSet::<usize>::new();
+                                tree.path_ids(node, &mut children_ids);
+                                let mut is_checked =
+                                    { children_ids.iter().all(|i| priorities[*i]) };
                                 let checkbox = ui.checkbox(&mut is_checked, "");
                                 if checkbox.changed() {
                                     let new_priority = if is_checked {
@@ -64,11 +65,11 @@ impl<'a> Widget for FilesWidget<'a> {
                                         TorrentFilePriority::Skip
                                     };
 
-                                    for id in ids {
+                                    for child_id in children_ids {
                                         channel_tx
                                             .send(Message::UpdateFilePriority(
                                                 torrent_index,
-                                                id,
+                                                child_id,
                                                 new_priority.clone(),
                                             ))
                                             .unwrap()
