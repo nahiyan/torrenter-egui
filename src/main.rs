@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 use views::add_torrent::AddTorrentWidget;
-use views::tabs::TabWidget;
+use views::tab::TabWidget;
 use views::torrent::TorrentWidget;
 mod bytes;
 pub mod controllers;
