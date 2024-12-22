@@ -352,6 +352,12 @@ struct TorrentInfo get_torrent_info(int index) {
   info.total_ses_download = status.total_download;
   info.total_ses_upload = status.total_upload;
 
+  if (status.download_rate > 0)
+    info.eta = (status.total_wanted - status.total_wanted_done) /
+               (double)status.download_rate;
+  else
+    info.eta = -1;
+
   return info;
 }
 

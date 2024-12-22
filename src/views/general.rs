@@ -9,6 +9,11 @@ pub struct GeneralWidget<'a> {
 impl<'a> Widget for GeneralWidget<'a> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         Grid::new("Information").num_columns(2).show(ui, |ui| {
+            // ETA
+            ui.label("ETA: ");
+            ui.label(format_duration(self.torrent.eta));
+            ui.end_row();
+
             // Time active
             ui.label("Time Active: ");
             ui.label(format!(
@@ -36,7 +41,7 @@ impl<'a> Widget for GeneralWidget<'a> {
 
             // Reannounce In
             ui.label("Reannounce In: ");
-            ui.label(format_duration(self.torrent.next_announce as i32));
+            ui.label(format_duration(self.torrent.next_announce));
             ui.end_row();
 
             // Save Path

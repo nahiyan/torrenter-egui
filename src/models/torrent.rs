@@ -73,6 +73,7 @@ pub struct Torrent {
     pub total_upload: i64,
     pub total_ses_download: i64,
     pub total_ses_upload: i64,
+    pub eta: i64,
 }
 
 impl Torrent {
@@ -102,6 +103,7 @@ impl Torrent {
             total_upload: 0,
             total_ses_download: 0,
             total_ses_upload: 0,
+            eta: 0,
         }
     }
 }

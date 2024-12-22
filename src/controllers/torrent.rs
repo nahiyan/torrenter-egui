@@ -102,6 +102,8 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
         torrent.total_ses_download = info.total_ses_download;
         torrent.total_ses_upload = info.total_ses_upload;
 
+        torrent.eta = info.eta;
+
         unsafe {
             free_torrent_info(info);
         }

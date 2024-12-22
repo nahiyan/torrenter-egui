@@ -32,6 +32,7 @@ struct TorrentInfo {
   long total_upload;
   long total_ses_download;
   long total_ses_upload;
+  long eta;
 };
 
 struct Peer {
