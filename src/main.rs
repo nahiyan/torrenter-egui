@@ -23,8 +23,9 @@ use views::add_torrent::AddTorrentWidget;
 use views::tab::TabWidget;
 use views::torrent::TorrentWidget;
 mod bytes;
-pub mod controllers;
-pub mod models;
+mod controllers;
+mod duration;
+mod models;
 mod tests;
 mod toasts;
 mod views;
@@ -137,7 +138,7 @@ impl Default for AppState {
                     (Tab::Files, "Files".to_owned(), false),
                     (Tab::Peers, "Peers".to_owned(), false),
                 ],
-                selected: Tab::Files,
+                selected: Tab::General,
             },
             toasts,
         }
@@ -163,8 +164,7 @@ impl eframe::App for AppState {
                     ui.add(TabWidget {
                         tab_view: &mut self.tab_view,
                         channel_tx: &self.channel_tx,
-                        files: &torrent.files,
-                        peers: &torrent.peers,
+                        torrent,
                         index,
                     });
                 });
@@ -195,6 +195,7 @@ impl eframe::App for AppState {
                 // Listen for pasted magnet URLs
                 add_torrent::handle_magnet_pastes(ctx, &self.channel_tx);
 
+                // Show the torrents
                 if !torrents.is_empty() {
                     ui.heading("Torrents");
                     ui.add_space(5.0);

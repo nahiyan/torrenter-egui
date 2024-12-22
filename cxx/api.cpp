@@ -1,4 +1,5 @@
 #include "api.h"
+#include <bits/chrono.h>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -321,10 +322,44 @@ struct TorrentInfo get_torrent_info(int index) {
   info.is_streaming = (h.flags() & lt::torrent_flags::sequential_download) ==
                       lt::torrent_flags::sequential_download;
 
+  // Hash
+  t->hash = get_hash(h);
+  char *hash = new char[t->hash.size() + 1];
+  copy(t->hash.begin(), t->hash.end(), hash);
+  hash[t->hash.size()] = '\0';
+  info.hash = hash;
+
+  // Comment
+  string comment = torrent_info->comment();
+  char *c = new char[comment.size() + 1];
+  copy(comment.begin(), comment.end(), c);
+  c[comment.size()] = '\0';
+  info.comment = c;
+
+  // Piece length
+  info.piece_len = torrent_info->piece_length();
+  info.pieces_downloaded = status.num_pieces;
+
+  // Duration
+  info.active_duration = status.active_duration.count();
+  info.seeding_duration = status.seeding_duration.count();
+
+  info.next_announce =
+      chrono::duration_cast<chrono::seconds>(status.next_announce).count();
+
+  info.total_download = status.all_time_download;
+  info.total_upload = status.all_time_upload;
+  info.total_ses_download = status.total_download;
+  info.total_ses_upload = status.total_upload;
+
   return info;
 }
 
-void free_torrent_info(TorrentInfo info) { delete[] info.pieces; }
+void free_torrent_info(TorrentInfo info) {
+  delete[] info.pieces;
+  delete[] info.hash;
+  delete[] info.comment;
+}
 
 Peer *get_peers(int index, int *num_peers) {
   assert(index < state.torrents.size());

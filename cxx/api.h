@@ -21,6 +21,17 @@ struct TorrentInfo {
   long total_size, download_rate, upload_rate, total_pieces;
   char *pieces;
   bool is_streaming;
+  const char *hash;
+  const char *comment;
+  long piece_len;
+  int pieces_downloaded;
+  int active_duration;
+  int seeding_duration;
+  long next_announce;
+  long total_download;
+  long total_upload;
+  long total_ses_download;
+  long total_ses_upload;
 };
 
 struct Peer {

@@ -77,6 +77,30 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
                 .expect("Failed to process C str")
                 .to_string()
         };
+        torrent.hash = unsafe {
+            CStr::from_ptr(info.hash)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string()
+        };
+        torrent.comment = unsafe {
+            CStr::from_ptr(info.comment)
+                .to_str()
+                .expect("Failed to process C str")
+                .to_string()
+        };
+        torrent.piece_len = info.piece_len;
+        torrent.pieces_downloaded = info.pieces_downloaded;
+
+        torrent.active_duration = info.active_duration;
+        torrent.seeding_duration = info.seeding_duration;
+
+        torrent.next_announce = info.next_announce;
+
+        torrent.total_download = info.total_download;
+        torrent.total_upload = info.total_upload;
+        torrent.total_ses_download = info.total_ses_download;
+        torrent.total_ses_upload = info.total_ses_upload;
 
         unsafe {
             free_torrent_info(info);
