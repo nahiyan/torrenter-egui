@@ -227,7 +227,6 @@ pub fn fetch_files(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
             let file = file::File { path, priority };
             files.push(file);
         }
-        assert!(num_files > 0);
         free_files(c_files, num_files);
     }
 }

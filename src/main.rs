@@ -181,6 +181,7 @@ impl eframe::App for AppState {
                 ui.add(AddTorrentWidget::new(
                     has_hovering_files,
                     &mut add_btn_clicked,
+                    ctx,
                 ));
                 ui.add_space(10.0);
                 let dropped_files = ctx.input(|r| r.raw.dropped_files.clone());
