@@ -42,13 +42,14 @@ impl<'a> Widget for TorrentWidget<'a> {
                 }
 
                 // Toggle strewam
-                let stream_btn = ui
-                    .button(if self.torrent.is_streaming {
-                        RichText::new("📶").strong()
-                    } else {
-                        RichText::new("📶")
-                    })
-                    .on_hover_text("Stream");
+                let text = if self.torrent.is_streaming {
+                    RichText::new("📶")
+                        .strong()
+                        .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
+                } else {
+                    RichText::new("📶")
+                };
+                let stream_btn = ui.button(text).on_hover_text("Stream");
                 if stream_btn.clicked() {
                     self.channel_tx
                         .send(Message::ToggleStreamMode(self.index))
@@ -67,8 +68,15 @@ impl<'a> Widget for TorrentWidget<'a> {
                 }
 
                 // Info button
-                let info_btn = ui.button("ℹ").on_hover_text("Details");
                 let is_selected = Some(self.index + 1) == self.sel_torrent;
+                let text = if is_selected {
+                    RichText::new("ℹ")
+                        .strong()
+                        .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
+                } else {
+                    RichText::new("ℹ")
+                };
+                let info_btn = ui.button(text).on_hover_text("Details");
                 if is_selected {
                     info_btn.clone().highlight();
                 }
@@ -151,7 +159,6 @@ impl<'a> Widget for TorrentWidget<'a> {
             } else {
                 ui.add(CompoundProgressBar::new(self.torrent));
             }
-            ui.add_space(15.0);
         });
         ui.response()
     }
