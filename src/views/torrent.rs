@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use egui::{Color32, Label, RichText, Widget};
+use egui::{Button, Color32, Label, RichText, Stroke, Widget};
 
 use crate::{
     format_bytes,
@@ -43,9 +43,8 @@ impl<'a> Widget for TorrentWidget<'a> {
 
                 // Toggle strewam
                 let text = if self.torrent.is_streaming {
-                    RichText::new("📶")
-                        .strong()
-                        .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
+                    RichText::new("📶").strong().underline()
+                    // .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
                 } else {
                     RichText::new("📶")
                 };
@@ -72,7 +71,8 @@ impl<'a> Widget for TorrentWidget<'a> {
                 let text = if is_selected {
                     RichText::new("ℹ")
                         .strong()
-                        .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
+                        // .color(Color32::ORANGE.lerp_to_gamma(Color32::WHITE, 0.5))
+                        .underline()
                 } else {
                     RichText::new("ℹ")
                 };
