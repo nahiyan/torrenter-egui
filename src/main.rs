@@ -206,6 +206,7 @@ impl eframe::App for AppState {
                             index,
                             channel_tx: &self.channel_tx,
                         });
+                        ui.add_space(10.0);
                     }
                 }
             });

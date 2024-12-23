@@ -123,12 +123,10 @@ pub fn add_torrent(path: String, kind: AddTorrentKind, toasts: Arc<Mutex<Toasts>
     let res = match kind {
         AddTorrentKind::MagnetUrl => {
             let magnet_url_cstr = path_cstr;
-            // TODO: Handle errors
             unsafe { add_magnet_url(magnet_url_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) }
         }
         AddTorrentKind::File => {
             let file_path_cstr = path_cstr;
-            // TODO: Handle errors
             unsafe { add_file(file_path_cstr.as_ptr(), downloads_dir_cstr.as_ptr()) }
         }
     };

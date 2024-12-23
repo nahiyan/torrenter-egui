@@ -65,13 +65,17 @@ impl Widget for CompoundProgressBar<'_> {
                 } else {
                     Color32::WHITE
                 };
-                // TODO: Allocate this space in the ui
                 ui.painter().rect_filled(
                     ui.painter().round_rect_to_pixels(*rect),
                     Rounding::from(0.0),
                     color,
                 );
             }
+
+            ui.allocate_space(Vec2 {
+                x: bar_width,
+                y: 15.0,
+            });
         })
         .response
     }
