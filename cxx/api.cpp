@@ -1,5 +1,4 @@
 #include "api.h"
-#include <bits/chrono.h>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -330,14 +329,14 @@ struct TorrentInfo get_torrent_info(int index) {
   info.hash = hash;
 
   // Comment
-  string comment = torrent_info->comment();
+  string comment = torrent_info != nullptr ? torrent_info->comment() : "";
   char *c = new char[comment.size() + 1];
   copy(comment.begin(), comment.end(), c);
   c[comment.size()] = '\0';
   info.comment = c;
 
   // Piece length
-  info.piece_len = torrent_info->piece_length();
+  info.piece_len = torrent_info != nullptr ? torrent_info->piece_length() : 0;
   info.pieces_downloaded = status.num_pieces;
 
   // Duration

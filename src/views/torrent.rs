@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use egui::{Button, Color32, Label, RichText, Stroke, Widget};
+use egui::{Color32, Label, RichText, Widget};
 
 use crate::{
     format_bytes,
