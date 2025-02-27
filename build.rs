@@ -1,16 +1,44 @@
-use std::path::PathBuf;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn main() {
-    // cxx library
+    // download libtorrent
+    if !Path::new("libtorrent").exists() {
+        println!("Downloading libtorrent.");
+        Command::new("git")
+            .args([
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                "v2.0.10",
+                "--recurse-submodules",
+                "https://github.com/arvidn/libtorrent.git",
+            ])
+            .status()
+            .expect("Failed to download libtorrent");
+    }
+
+    // build and link cxx library
     let dst_cxx = cmake::Config::new("cxx").build();
-    println!("cargo:rustc-link-search=native={}", dst_cxx.display());
+    println!("cargo:rustc-link-search=native={}/lib", dst_cxx.display());
     println!("cargo:rustc-link-lib=static=cxx");
 
-    // libtorrent library
-    println!("cargo:rustc-link-search=native=lib");
+    // build and link libtorrent library
+    let dst_libtorrent = cmake::Config::new("libtorrent")
+        .define("CMAKE_BUILD_TYPE", "Release")
+        .define("CMAKE_CXX_STANDARD", "17")
+        .define("BUILD_SHARED_LIBS", "OFF")
+        .build();
+    println!(
+        "cargo:rustc-link-search=native={}/lib",
+        dst_libtorrent.display()
+    );
     println!("cargo:rustc-link-lib=static=torrent-rasterbar");
 
-    // indirect dependencies
+    // link indirect dependencies
     // println!("cargo:rustc-link-lib=asan");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
