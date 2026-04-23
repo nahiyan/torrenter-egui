@@ -18,12 +18,25 @@ mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 use bindings::*;
-const trnt_add_fail_msg: &str = "Failed to add new torrent.";
-const trnt_add_success_msg: &str = "Added new torrent.";
-const trnt_remove_success_msg: &str = "Removed torrent.";
-const trnt_remove_fail_msg: &str = "Failed to remove torrent.";
-const trnt_set_file_priority_fail_msg: &str = "Failed to change priority.";
-const trnt_set_state_fail_msg: &str = "Failed to pause/resume torrent state.";
+
+const TRNT_ADD_FAIL: &str = "Failed to add new torrent.";
+const TRNT_ADD_OK: &str = "Added new torrent.";
+const TRNT_REMOVE_OK: &str = "Removed torrent.";
+const TRNT_REMOVE_FAIL: &str = "Failed to remove torrent.";
+const TRNT_PRIORITY_FAIL: &str = "Failed to change priority.";
+const TRNT_STATE_FAIL: &str = "Failed to pause/resume torrent state.";
+
+/// Safely convert a C string pointer to a Rust String.
+/// Returns an empty string if the pointer is null or contains invalid UTF-8.
+unsafe fn c_str_to_string(ptr: *const std::os::raw::c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    CStr::from_ptr(ptr)
+        .to_str()
+        .unwrap_or("")
+        .to_string()
+}
 
 pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
     let torrents_count = unsafe { get_count() as usize };
@@ -37,52 +50,31 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
             .expect("Failed to get torrent by index");
         let info = unsafe { get_torrent_info(index as c_int) };
         torrent.progress = info.progress;
-        torrent.name = unsafe {
-            let c_str = info.name;
-            CStr::from_ptr(c_str)
-                .to_str()
-                .expect("Failed to work with cstr")
-                .to_string()
-        };
+        torrent.name = unsafe { c_str_to_string(info.name) };
         torrent.state = TorrentState::from(info.state);
         torrent.total_size = info.total_size;
         torrent.download_rate = info.download_rate;
         torrent.upload_rate = info.upload_rate;
         torrent.num_peers = info.peers;
         torrent.num_seeds = info.seeds;
-        torrent.pieces = unsafe {
-            let total_pieces = info.total_pieces;
-            let mut pieces = vec![];
-            for i in 0..total_pieces {
-                let piece = *info.pieces.add(i as usize) as u8 as char;
-                pieces.push(match piece {
-                    'c' => TorrentPieceState::Complete,
-                    'i' => TorrentPieceState::Incomplete,
-                    'q' => TorrentPieceState::Queued,
-                    _ => TorrentPieceState::Incomplete,
-                });
+        torrent.pieces = if info.pieces.is_null() || info.total_pieces <= 0 {
+            vec![]
+        } else {
+            unsafe {
+                (0..info.total_pieces as usize)
+                    .map(|i| match *info.pieces.add(i) as u8 as char {
+                        'c' => TorrentPieceState::Complete,
+                        'i' => TorrentPieceState::Incomplete,
+                        'q' => TorrentPieceState::Queued,
+                        _ => TorrentPieceState::Incomplete,
+                    })
+                    .collect()
             }
-            pieces
         };
         torrent.is_streaming = info.is_streaming;
-        torrent.save_path = unsafe {
-            CStr::from_ptr(info.save_path)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string()
-        };
-        torrent.hash = unsafe {
-            CStr::from_ptr(info.hash)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string()
-        };
-        torrent.comment = unsafe {
-            CStr::from_ptr(info.comment)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string()
-        };
+        torrent.save_path = unsafe { c_str_to_string(info.save_path) };
+        torrent.hash = unsafe { c_str_to_string(info.hash) };
+        torrent.comment = unsafe { c_str_to_string(info.comment) };
         torrent.piece_len = info.piece_len;
         torrent.pieces_downloaded = info.pieces_downloaded;
 
@@ -105,13 +97,19 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
 }
 
 pub fn add_torrent(path: String, kind: AddTorrentKind, toasts: Arc<Mutex<Toasts>>) {
-    let downloads_dir = dirs::download_dir()
-        .expect("Failed to get downloads dir.")
-        .to_str()
-        .expect("Failed to convert to string")
-        .to_owned();
-    let downloads_dir_cstr = CString::new(downloads_dir.clone()).expect("Failed to create CString");
-    let path_cstr = CString::new(path).expect("Failed to create CString");
+    let Some(downloads_dir) = dirs::download_dir().and_then(|d| d.to_str().map(String::from))
+    else {
+        toasts::error(&mut toasts.lock().unwrap(), TRNT_ADD_FAIL);
+        return;
+    };
+    let Ok(downloads_dir_cstr) = CString::new(downloads_dir) else {
+        toasts::error(&mut toasts.lock().unwrap(), TRNT_ADD_FAIL);
+        return;
+    };
+    let Ok(path_cstr) = CString::new(path) else {
+        toasts::error(&mut toasts.lock().unwrap(), TRNT_ADD_FAIL);
+        return;
+    };
     let mut toasts = toasts.lock().unwrap();
 
     let res = match kind {
@@ -126,9 +124,9 @@ pub fn add_torrent(path: String, kind: AddTorrentKind, toasts: Arc<Mutex<Toasts>
     };
 
     if res {
-        toasts::success(&mut toasts, trnt_add_success_msg);
+        toasts::success(&mut toasts, TRNT_ADD_OK);
     } else {
-        toasts::error(&mut toasts, trnt_add_fail_msg);
+        toasts::error(&mut toasts, TRNT_ADD_FAIL);
     }
 }
 
@@ -136,9 +134,9 @@ pub fn remove(index: usize, toasts: Arc<Mutex<Toasts>>) {
     let mut toasts = toasts.lock().unwrap();
     let res = unsafe { torrent_remove(index as c_int) };
     if res {
-        toasts::success(&mut toasts, trnt_remove_success_msg);
+        toasts::success(&mut toasts, TRNT_REMOVE_OK);
     } else {
-        toasts::error(&mut toasts, trnt_remove_fail_msg);
+        toasts::error(&mut toasts, TRNT_REMOVE_FAIL);
     }
 }
 
@@ -146,7 +144,7 @@ pub fn toggle_stream_mode(index: usize, toasts: Arc<Mutex<Toasts>>) {
     let mut toasts = toasts.lock().unwrap();
     let res = unsafe { toggle_stream(index as c_int) };
     if !res {
-        toasts::error(&mut toasts, trnt_remove_fail_msg);
+        toasts::error(&mut toasts, TRNT_REMOVE_FAIL);
     }
 }
 
@@ -166,7 +164,7 @@ pub fn set_file_priority(
         )
     };
     if !res {
-        toasts::error(&mut toasts, trnt_set_file_priority_fail_msg);
+        toasts::error(&mut toasts, TRNT_PRIORITY_FAIL);
     }
 }
 
@@ -178,7 +176,7 @@ pub fn toggle_state(index: usize, state: TorrentState, toasts: Arc<Mutex<Toasts>
         unsafe { torrent_pause(index as c_int) }
     };
     if !res {
-        toasts::error(&mut toasts, trnt_set_state_fail_msg);
+        toasts::error(&mut toasts, TRNT_STATE_FAIL);
     }
 }
 
@@ -190,29 +188,19 @@ pub fn fetch_peers(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
     peers.clear();
     unsafe {
         let c_peers = get_peers(index as c_int, num_peers_ptr);
-        for i in 0..num_peers {
-            let c_peer = *c_peers.add(i as usize);
-            let ip_address = CStr::from_ptr(c_peer.ip_address)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string();
-            let client = CStr::from_ptr(c_peer.client)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string();
-            let download_rate = c_peer.download_rate;
-            let upload_rate = c_peer.upload_rate;
-            let progress = c_peer.progress;
-            let peer = peer::Peer {
-                ip_address,
-                progress,
-                client,
-                download_rate,
-                upload_rate,
-            };
-            peers.push(peer);
+        if !c_peers.is_null() && num_peers > 0 {
+            for i in 0..num_peers {
+                let c_peer = *c_peers.add(i as usize);
+                peers.push(peer::Peer {
+                    ip_address: c_str_to_string(c_peer.ip_address),
+                    client: c_str_to_string(c_peer.client),
+                    progress: c_peer.progress,
+                    download_rate: c_peer.download_rate,
+                    upload_rate: c_peer.upload_rate,
+                });
+            }
+            free_peers(c_peers, num_peers);
         }
-        free_peers(c_peers, num_peers);
     }
 }
 
@@ -224,16 +212,15 @@ pub fn fetch_files(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
     files.clear();
     unsafe {
         let c_files = get_files(index as c_int, num_files_ptr);
-        for i in 0..num_files {
-            let c_file = *c_files.add(i as usize);
-            let path = CStr::from_ptr(c_file.path)
-                .to_str()
-                .expect("Failed to process C str")
-                .to_string();
-            let priority = TorrentFilePriority::from(c_file.priority);
-            let file = file::File { path, priority };
-            files.push(file);
+        if !c_files.is_null() && num_files > 0 {
+            for i in 0..num_files {
+                let c_file = *c_files.add(i as usize);
+                files.push(file::File {
+                    path: c_str_to_string(c_file.path),
+                    priority: TorrentFilePriority::from(c_file.priority),
+                });
+            }
+            free_files(c_files, num_files);
         }
-        free_files(c_files, num_files);
     }
 }
