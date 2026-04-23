@@ -15,7 +15,7 @@ macro_rules! format_bytes {
         } else if $bytes >= kb {
             format!("{:.2} KB{}", $bytes as f32 / kb as f32, $prefix)
         } else {
-            format!("{:.2} B{}", $bytes as f32 / mb as f32, $prefix)
+            format!("{} B{}", $bytes, $prefix)
         }
     }};
 
