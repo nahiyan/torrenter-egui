@@ -19,10 +19,13 @@ fn main() {
     println!("cargo:rustc-link-lib=static=torrent-rasterbar");
 
     // link indirect dependencies
-    // println!("cargo:rustc-link-lib=asan");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
-    println!("cargo:rustc-link-lib=stdc++");
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-lib=c++");
+    } else {
+        println!("cargo:rustc-link-lib=stdc++");
+    }
 
     // files to watch for changes
     println!("cargo:rerun-if-changed=./cxx/CMakeLists.txt");
