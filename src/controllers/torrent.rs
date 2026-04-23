@@ -40,17 +40,7 @@ pub fn refresh(torrents: Arc<Mutex<Vec<Torrent>>>) {
                 .expect("Failed to work with cstr")
                 .to_string()
         };
-        torrent.state = match info.state {
-            0 => TorrentState::QueuedForChecking,
-            1 => TorrentState::CheckingFiles,
-            2 => TorrentState::DownloadingMetaData,
-            3 => TorrentState::Downloading,
-            4 => TorrentState::Finished,
-            5 => TorrentState::Seeding,
-            6 => TorrentState::Allocating,
-            7 => TorrentState::CheckingResumeData,
-            _ => TorrentState::Paused,
-        };
+        torrent.state = TorrentState::from(info.state);
         torrent.total_size = info.total_size;
         torrent.download_rate = info.download_rate;
         torrent.upload_rate = info.upload_rate;
@@ -163,12 +153,7 @@ pub fn set_file_priority(
     toasts: Arc<Mutex<Toasts>>,
 ) {
     let mut toasts = toasts.lock().unwrap();
-    let lt_download_priority = match priority {
-        TorrentFilePriority::Skip => 0,
-        TorrentFilePriority::Low => 1,
-        TorrentFilePriority::Default => 4,
-        TorrentFilePriority::High => 7,
-    };
+    let lt_download_priority: i32 = priority.into();
     let res = unsafe {
         change_file_priority(
             index as c_int,
@@ -241,13 +226,7 @@ pub fn fetch_files(index: usize, torrents: Arc<Mutex<Vec<Torrent>>>) {
                 .to_str()
                 .expect("Failed to process C str")
                 .to_string();
-            let priority = match c_file.priority {
-                0 => TorrentFilePriority::Skip,
-                1 => TorrentFilePriority::Low,
-                4 => TorrentFilePriority::Default,
-                7 => TorrentFilePriority::High,
-                _ => TorrentFilePriority::Default,
-            };
+            let priority = TorrentFilePriority::from(c_file.priority);
             let file = file::File { path, priority };
             files.push(file);
         }

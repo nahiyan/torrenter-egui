@@ -10,6 +10,29 @@ pub enum TorrentFilePriority {
     High,
 }
 
+impl From<i32> for TorrentFilePriority {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => TorrentFilePriority::Skip,
+            1 => TorrentFilePriority::Low,
+            4 => TorrentFilePriority::Default,
+            7 => TorrentFilePriority::High,
+            _ => TorrentFilePriority::Default,
+        }
+    }
+}
+
+impl From<TorrentFilePriority> for i32 {
+    fn from(priority: TorrentFilePriority) -> Self {
+        match priority {
+            TorrentFilePriority::Skip => 0,
+            TorrentFilePriority::Low => 1,
+            TorrentFilePriority::Default => 4,
+            TorrentFilePriority::High => 7,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum TorrentState {
     QueuedForChecking,
@@ -21,6 +44,22 @@ pub enum TorrentState {
     Allocating,
     CheckingResumeData,
     Paused,
+}
+
+impl From<i32> for TorrentState {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => TorrentState::QueuedForChecking,
+            1 => TorrentState::CheckingFiles,
+            2 => TorrentState::DownloadingMetaData,
+            3 => TorrentState::Downloading,
+            4 => TorrentState::Finished,
+            5 => TorrentState::Seeding,
+            6 => TorrentState::Allocating,
+            7 => TorrentState::CheckingResumeData,
+            _ => TorrentState::Paused,
+        }
+    }
 }
 
 impl fmt::Display for TorrentState {
