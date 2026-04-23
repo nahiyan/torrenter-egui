@@ -22,7 +22,7 @@ impl MessageController {
     pub fn process(&mut self, message: Message) {
         match message {
             Message::Stop => {
-                println!("Stopping.");
+                log::info!("Stopping.");
                 unsafe {
                     destroy();
                 };
