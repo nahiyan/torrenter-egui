@@ -13,7 +13,11 @@ use std::{
     ffi::{c_int, CStr, CString},
     sync::{Arc, Mutex},
 };
-include!("../../bindings.rs");
+#[allow(warnings)]
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
+use bindings::*;
 const trnt_add_fail_msg: &str = "Failed to add new torrent.";
 const trnt_add_success_msg: &str = "Added new torrent.";
 const trnt_remove_success_msg: &str = "Removed torrent.";

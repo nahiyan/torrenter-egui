@@ -3,8 +3,9 @@ FROM rust:1.85-slim AS base
 WORKDIR /app
 COPY cxx ./cxx
 COPY src ./src
-COPY build.rs Cargo.lock Cargo.toml ./
-RUN apt update && apt install -y git cmake clang libboost-dev libssl-dev libcrypto++-dev
+COPY libtorrent ./libtorrent
+COPY build.rs Cargo.lock Cargo.toml .gitmodules ./
+RUN apt update && apt install -y cmake clang libboost-dev libssl-dev libcrypto++-dev
 
 # Development stage
 FROM base AS build-dev

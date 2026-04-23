@@ -29,7 +29,11 @@ mod models;
 mod tests;
 mod toasts;
 mod views;
-include!("../bindings.rs");
+#[allow(warnings)]
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
+use bindings::*;
 
 fn prepare_data_dir() -> PathBuf {
     let data_dir_base = dirs::data_dir().expect("Failed to get the data dir.");

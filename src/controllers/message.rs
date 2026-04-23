@@ -7,7 +7,11 @@ use egui_toast::Toasts;
 
 use super::torrent;
 use crate::models::{message::Message, torrent::Torrent};
-include!("../../bindings.rs");
+#[allow(warnings)]
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
+use bindings::*;
 
 pub struct MessageController {
     pub tx: Sender<Message>,

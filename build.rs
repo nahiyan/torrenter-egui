@@ -1,26 +1,6 @@
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::PathBuf;
 
 fn main() {
-    // download libtorrent
-    if !Path::new("libtorrent").exists() {
-        println!("Downloading libtorrent.");
-        Command::new("git")
-            .args([
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                "v2.0.10",
-                "--recurse-submodules",
-                "https://github.com/arvidn/libtorrent.git",
-            ])
-            .status()
-            .expect("Failed to download libtorrent");
-    }
-
     // build and link cxx library
     let dst_cxx = cmake::Config::new("cxx").build();
     println!("cargo:rustc-link-search=native={}/lib", dst_cxx.display());
@@ -55,8 +35,8 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path = PathBuf::from("./");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     bindings
-        .write_to_file(out_path.join("bindings.rs"))
+        .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 }
