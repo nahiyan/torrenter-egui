@@ -20,10 +20,18 @@ build process:
 - **libssl** and **libcrypto**, both open-source libraries housed in the
   [OpenSSL Project repository](https://github.com/openssl/openssl).
 
-The primary dependency, **libtorrent**, should be automatically downloaded and
-built by the build script.
+The primary dependency, **libtorrent**, is included as a git submodule and built
+automatically by the build script.
 
-Run the following command to initiate the build process:
+Clone the repository with submodules:
+
+`git clone --recurse-submodules https://github.com/user/torrenter-egui.git`
+
+If you've already cloned without submodules, run:
+
+`git submodule update --init --recursive`
+
+Then build:
 
 `cargo build --release`
 
